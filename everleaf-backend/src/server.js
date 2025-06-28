@@ -279,7 +279,8 @@ const startServer = async () => {
     scheduleCleanup();
     
     // Start listening
-    server.listen(PORT, () => {
+    server.listen(PORT, '0.0.0.0', () => {
+
       console.log(`
 🚀 Everleaf Backend Server Started!
 📍 Environment: ${process.env.NODE_ENV || 'development'}
