@@ -28,8 +28,8 @@ WORKDIR /app
 # Copy package files first for better caching
 COPY everleaf-backend/package*.json ./
 
-# Install Node.js dependencies
-RUN npm ci --only=production && npm cache clean --force
+# Install Node.js dependencies (using new syntax)
+RUN npm ci --omit=dev --no-optional && npm cache clean --force
 
 # Copy application code
 COPY everleaf-backend/ ./
@@ -43,7 +43,7 @@ EXPOSE $PORT
 
 # Health check endpoint
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:$PORT/api/latex/health || exit 1
+    CMD curl -f http://localhost:$PORT/health || exit 1
 
 # Start the application
 CMD ["npm", "start"]
