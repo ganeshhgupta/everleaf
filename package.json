@@ -1,0 +1,13 @@
+{
+  "name": "everleaf-deployment",
+  "version": "1.0.0",
+  "description": "Deployment configuration for Everleaf backend",
+  "scripts": {
+    "start": "cd everleaf-backend && npm start",
+    "build": "cd everleaf-backend && npm ci --only=production",
+    "postinstall": "cd everleaf-backend && npm install"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

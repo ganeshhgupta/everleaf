@@ -44,3 +44,59 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8;
 }
+
+/* PDF Viewer Styling - Add this to your index.css */
+
+/* Try to hide/style PDF.js toolbar */
+iframe[src*=".pdf"] {
+  background: white !important;
+}
+
+/* Override PDF.js dark toolbar */
+@media screen {
+  /* Target PDF.js viewer */
+  .pdfViewer {
+    background: white !important;
+  }
+  
+  /* Try to style the toolbar */
+  #toolbarContainer {
+    background: white !important;
+    border-bottom: 1px solid #e5e7eb !important;
+  }
+  
+  #toolbar {
+    background: white !important;
+    border-bottom: 1px solid #e5e7eb !important;
+  }
+  
+  /* Style PDF.js buttons to match your UI */
+  .toolbarButton {
+    background: white !important;
+    border: 1px solid #d1d5db !important;
+    color: #374151 !important;
+  }
+  
+  .toolbarButton:hover {
+    background: #f9fafb !important;
+  }
+  
+  /* Style input fields in PDF viewer */
+  .toolbarField {
+    background: white !important;
+    border: 1px solid #d1d5db !important;
+    color: #374151 !important;
+  }
+}
+
+/* Alternative approach - try to completely hide PDF controls */
+iframe[src*=".pdf"] {
+  /* This CSS filter approach lightens dark elements */
+  filter: brightness(1.1) contrast(0.9) !important;
+}
+
+/* If using Chrome's PDF viewer, try these */
+embed[type="application/pdf"],
+object[type="application/pdf"] {
+  filter: brightness(1.1) contrast(0.9) !important;
+}
