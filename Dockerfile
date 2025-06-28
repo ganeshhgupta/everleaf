@@ -25,11 +25,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Create app directory
 WORKDIR /app
 
-# Copy package files first for better caching
-COPY everleaf-backend/package*.json ./
+# Copy the backend package.json and package-lock.json (if it exists)
+COPY everleaf-backend/package.json ./
+COPY everleaf-backend/package-lock.json* ./
 
-# Install Node.js dependencies (using new syntax)
-RUN npm ci --omit=dev --no-optional && npm cache clean --force
+# Clear npm cache and install dependencies
+RUN npm cache clean --force
+RUN npm install --production --no-optional --legacy-peer-deps --verbose
 
 # Copy application code
 COPY everleaf-backend/ ./
@@ -39,11 +41,11 @@ RUN mkdir -p /tmp/latex /app/uploads && \
     chmod 755 /tmp/latex /app/uploads
 
 # Expose port (Render will set PORT env var)
-EXPOSE $PORT
+EXPOSE 5000
 
 # Health check endpoint
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:$PORT/health || exit 1
+    CMD curl -f http://localhost:5000/health || exit 1
 
 # Start the application
 CMD ["npm", "start"]
