@@ -17,7 +17,7 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   // Configure axios defaults
-  axios.defaults.baseURL = 'http://localhost:5000/api';
+  defaults.baseURL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
   console.log('🔍 Axios baseURL set to:', axios.defaults.baseURL);
   console.log('🔍 Environment variable:', process.env.REACT_APP_API_URL);
