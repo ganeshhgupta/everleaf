@@ -4,7 +4,7 @@ const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const os = require('os');
 
-// Main Docker LaTeX compilation
+// Main LaTeX compilation (using direct TexLive instead of Docker)
 const compileLatex = async (req, res) => {
   let workDir = null;
   
@@ -12,7 +12,7 @@ const compileLatex = async (req, res) => {
     const { files } = req.body;
     const projectId = req.params.projectId;
     
-    console.log(`🔧 Starting Docker LaTeX compilation for project ${projectId}`);
+    console.log(`🔧 Starting TexLive compilation for project ${projectId}`);
     
     // Validate input
     if (!files || !files['main.tex']) {
@@ -24,7 +24,7 @@ const compileLatex = async (req, res) => {
     
     // Create unique compilation directory in temp
     const compilationId = uuidv4();
-    workDir = path.join(os.tmpdir(), 'latex', compilationId);
+    workDir = path.join('/tmp/latex', compilationId);
     
     console.log(`📁 Creating work directory: ${workDir}`);
     await fs.mkdir(workDir, { recursive: true });
@@ -44,10 +44,6 @@ const compileLatex = async (req, res) => {
       console.log(`✅ Written: ${filename} (${content.length} chars)`);
     }
     
-    // Convert Windows path to Docker-compatible format
-    const dockerWorkDir = convertToDockerPath(workDir);
-    console.log(`🐳 Docker work directory: ${dockerWorkDir}`);
-    
     // Check document complexity for multiple passes
     const mainTexContent = files['main.tex'];
     const needsMultiplePasses = isComplexDocument(mainTexContent);
@@ -65,7 +61,7 @@ const compileLatex = async (req, res) => {
       for (let i = 0; i < passes.length; i++) {
         console.log(`🔄 Running compilation pass ${i + 1}/${passes.length}`);
         
-        const result = await runDockerCompilation(dockerWorkDir, passes[i]);
+        const result = await runDirectLatexCompilation(workDir, passes[i]);
         stdout += result.stdout;
         stderr += result.stderr;
         
@@ -80,7 +76,7 @@ const compileLatex = async (req, res) => {
       }
     } else {
       console.log(`📄 Simple document, running single compilation pass`);
-      const result = await runDockerCompilation(dockerWorkDir, 'pdflatex');
+      const result = await runDirectLatexCompilation(workDir, 'pdflatex');
       stdout = result.stdout;
       stderr = result.stderr;
       compilationSuccess = result.code === 0;
@@ -131,25 +127,13 @@ const compileLatex = async (req, res) => {
     }
     
   } catch (error) {
-    console.error('❌ Docker LaTeX compilation error:', error);
+    console.error('❌ LaTeX compilation error:', error);
     
     if (error.message.includes('timeout')) {
       return res.status(408).json({
         success: false,
         message: 'Compilation timeout',
         errors: ['Compilation timed out after 60 seconds']
-      });
-    }
-    
-    if (error.message.includes('docker') || error.code === 'ENOENT') {
-      return res.status(503).json({
-        success: false,
-        message: 'Docker service unavailable',
-        errors: [
-          'Docker is not running or not accessible',
-          'Please ensure Docker Desktop is running',
-          'Make sure texlive/texlive:latest image is available'
-        ]
       });
     }
     
@@ -174,19 +158,19 @@ const compileLatex = async (req, res) => {
   }
 };
 
-// System compilation (alias to main Docker compilation)
+// System compilation (alias to main compilation)
 const compileLatexSystem = async (req, res) => {
-  console.log('🖥️ System compilation (using Docker TexLive)');
+  console.log('🖥️ System compilation (using direct TexLive)');
   return compileLatex(req, res);
 };
 
-// Cloud compilation fallback (simplified using Docker)
+// Cloud compilation fallback (simplified)
 const compileLatexCloud = async (req, res) => {
   try {
     const { files } = req.body;
     const projectId = req.params.projectId;
     
-    console.log(`🌤️ Cloud compilation fallback for project ${projectId} (using Docker)`);
+    console.log(`🌤️ Cloud compilation fallback for project ${projectId}`);
     
     // For cloud fallback, try to simplify the document first
     if (files && files['main.tex']) {
@@ -196,7 +180,7 @@ const compileLatexCloud = async (req, res) => {
       // Replace main.tex with simplified version
       const modifiedFiles = { ...files, 'main.tex': simplifiedContent };
       
-      // Use the main Docker compilation with simplified content
+      // Use the main compilation with simplified content
       req.body.files = modifiedFiles;
       return compileLatex(req, res);
     }
@@ -216,95 +200,80 @@ const compileLatexCloud = async (req, res) => {
   }
 };
 
-// Run Docker compilation command
-const runDockerCompilation = async (dockerWorkDir, command = 'pdflatex') => {
-  const dockerArgs = [
-    'run',
-    '--rm',
-    '-v', `${dockerWorkDir}:/workspace`,
-    '-w', '/workspace',
-    'texlive/texlive:latest',
-    command,
+// Run direct LaTeX compilation (no Docker)
+const runDirectLatexCompilation = async (workDir, command = 'pdflatex') => {
+  const args = [
     '-interaction=nonstopmode',
     '-halt-on-error',
+    '-output-directory', workDir,
     'main.tex'
   ];
   
-  console.log(`🐳 Running Docker: docker ${dockerArgs.join(' ')}`);
+  console.log(`📝 Running direct TexLive: ${command} ${args.join(' ')}`);
   
-  // Windows-specific Docker execution
-  const isWindows = os.platform() === 'win32';
-  const dockerCommand = 'docker'; // Try without .exe first
-  
-  const dockerProcess = spawn(dockerCommand, dockerArgs, {
+  const latexProcess = spawn(command, args, {
+    cwd: workDir,
     stdio: ['pipe', 'pipe', 'pipe'],
-    shell: true,
-    env: { 
-      ...process.env, 
-      PATH: process.env.PATH + ';C:\\Program Files\\Docker\\Docker\\resources\\bin'
-    } // Add Docker path explicitly
+    env: {
+      ...process.env,
+      TEXMFHOME: '/tmp/texmf',
+      TEXMFVAR: '/tmp/texmf-var',
+      TEXMFCONFIG: '/tmp/texmf-config'
+    }
   });
   
   let stdout = '';
   let stderr = '';
   
-  dockerProcess.stdout.on('data', (data) => {
+  latexProcess.stdout.on('data', (data) => {
     stdout += data.toString();
   });
   
-  dockerProcess.stderr.on('data', (data) => {
+  latexProcess.stderr.on('data', (data) => {
     stderr += data.toString();
   });
   
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
-      dockerProcess.kill();
-      reject(new Error('Docker compilation timeout after 60 seconds'));
+      latexProcess.kill();
+      reject(new Error('LaTeX compilation timeout after 60 seconds'));
     }, 60000);
     
-    dockerProcess.on('close', (code) => {
+    latexProcess.on('close', (code) => {
       clearTimeout(timeout);
       resolve({ code, stdout, stderr });
     });
     
-    dockerProcess.on('error', (error) => {
+    latexProcess.on('error', (error) => {
       clearTimeout(timeout);
       reject(error);
     });
   });
 };
 
-// Test Docker environment and TexLive availability
+// Test TexLive environment (no Docker)
 const testCloudServices = async (req, res) => {
   try {
-    console.log('🧪 Testing Docker TexLive environment...');
+    console.log('🧪 Testing direct TexLive environment...');
     
-    const isWindows = os.platform() === 'win32';
-    const dockerCommand = 'docker'; // Use 'docker' instead of 'docker.exe'
-    
-    // Test Docker accessibility using spawn (same as compilation)
-    const dockerTestResult = await new Promise((resolve) => {
-      const dockerProcess = spawn(dockerCommand, ['--version'], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        shell: true,
-        env: { 
-          ...process.env,
-          PATH: process.env.PATH + ';C:\\Program Files\\Docker\\Docker\\resources\\bin'
-        }
+    // Test pdflatex availability
+    const pdflatexTestResult = await new Promise((resolve) => {
+      const latexProcess = spawn('pdflatex', ['--version'], {
+        stdio: ['pipe', 'pipe', 'pipe']
       });
       
       let stdout = '';
       let stderr = '';
       
-      dockerProcess.stdout.on('data', (data) => {
+      latexProcess.stdout.on('data', (data) => {
         stdout += data.toString();
       });
       
-      dockerProcess.stderr.on('data', (data) => {
+      latexProcess.stderr.on('data', (data) => {
         stderr += data.toString();
       });
       
-      dockerProcess.on('close', (code) => {
+      latexProcess.on('close', (code) => {
         resolve({
           success: code === 0,
           version: code === 0 ? stdout.trim() : null,
@@ -312,7 +281,7 @@ const testCloudServices = async (req, res) => {
         });
       });
       
-      dockerProcess.on('error', (error) => {
+      latexProcess.on('error', (error) => {
         resolve({
           success: false,
           version: null,
@@ -321,74 +290,30 @@ const testCloudServices = async (req, res) => {
       });
     });
     
-    console.log('Docker test result:', dockerTestResult);
-    
-    // Test TexLive image availability using spawn
-    const imageTestResult = await new Promise((resolve) => {
-      const dockerProcess = spawn(dockerCommand, ['images', 'texlive/texlive', '--format', 'table {{.Repository}}:{{.Tag}}'], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        shell: true,
-        env: { 
-          ...process.env,
-          PATH: process.env.PATH + ';C:\\Program Files\\Docker\\Docker\\resources\\bin'
-        }
-      });
-      
-      let stdout = '';
-      let stderr = '';
-      
-      dockerProcess.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
-      
-      dockerProcess.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-      
-      dockerProcess.on('close', (code) => {
-        resolve({
-          success: code === 0 && stdout.includes('texlive/texlive'),
-          images: code === 0 ? stdout.trim() : null,
-          error: code !== 0 ? (stderr || `Exit code: ${code}`) : null
-        });
-      });
-      
-      dockerProcess.on('error', (error) => {
-        resolve({
-          success: false,
-          images: null,
-          error: error.message
-        });
-      });
-    });
-    
-    console.log('TexLive image test result:', imageTestResult);
+    console.log('TexLive test result:', pdflatexTestResult);
     
     // Test actual compilation with simple document
     let compilationTest = { success: false, error: 'Not tested' };
     
-    if (dockerTestResult.success && imageTestResult.success) {
+    if (pdflatexTestResult.success) {
       try {
         console.log('🧪 Testing actual LaTeX compilation...');
         
         // Create a simple test document
         const compilationId = uuidv4();
-        const testWorkDir = path.join(os.tmpdir(), 'latex-test', compilationId);
+        const testWorkDir = path.join('/tmp/latex', 'test-' + compilationId);
         await fs.mkdir(testWorkDir, { recursive: true });
         
         const testLatex = `\\documentclass{article}
 \\begin{document}
 Hello World! Test compilation at ${new Date().toISOString()}
-\\\\This is a test from Node.js Docker integration.
+\\\\This is a test from direct TexLive integration.
 \\end{document}`;
         
         await fs.writeFile(path.join(testWorkDir, 'main.tex'), testLatex, 'utf8');
         
-        // Convert to Docker path
-        const dockerTestWorkDir = convertToDockerPath(testWorkDir);
-        
-        // Run actual Docker compilation
-        const testResult = await runDockerCompilation(dockerTestWorkDir, 'pdflatex');
+        // Run actual TexLive compilation
+        const testResult = await runDirectLatexCompilation(testWorkDir, 'pdflatex');
         
         // Check if PDF was created
         const testPdfPath = path.join(testWorkDir, 'main.pdf');
@@ -427,24 +352,22 @@ Hello World! Test compilation at ${new Date().toISOString()}
       }
     }
     
-    const overallSuccess = dockerTestResult.success && imageTestResult.success && compilationTest.success;
+    const overallSuccess = pdflatexTestResult.success && compilationTest.success;
     
     res.json({
       success: overallSuccess,
       environment: {
-        docker: dockerTestResult,
-        texliveImage: imageTestResult,
+        pdflatex: pdflatexTestResult,
         compilation: compilationTest,
         platform: os.platform(),
         arch: os.arch()
       },
       message: overallSuccess 
-        ? 'Docker TexLive environment is fully functional!' 
-        : 'Docker TexLive environment test completed with issues',
+        ? 'Direct TexLive environment is fully functional!' 
+        : 'TexLive environment test completed with issues',
       recommendations: overallSuccess ? [] : [
-        !dockerTestResult.success ? 'Ensure Docker Desktop is running and accessible from Node.js' : null,
-        !imageTestResult.success ? 'Pull TexLive image: docker pull texlive/texlive:latest' : null,
-        !compilationTest.success ? 'Check Docker container permissions and TexLive installation' : null
+        !pdflatexTestResult.success ? 'Ensure TexLive is properly installed' : null,
+        !compilationTest.success ? 'Check TexLive installation and permissions' : null
       ].filter(Boolean)
     });
     
@@ -462,32 +385,21 @@ Hello World! Test compilation at ${new Date().toISOString()}
 const healthCheck = async (req, res) => {
   res.json({
     success: true,
-    message: 'Docker LaTeX controller is healthy',
+    message: 'Direct TexLive controller is healthy',
     timestamp: new Date().toISOString(),
-    compilation: 'Docker TexLive',
-    version: '4.0.0',
+    compilation: 'Direct TexLive',
+    version: '5.0.0',
     features: [
-      'Docker TexLive compilation',
+      'Direct TexLive compilation',
       'Multi-pass compilation for complex documents',
-      'Windows Docker path conversion',
+      'Container-native execution',
       'Comprehensive error parsing',
       'Document complexity detection'
     ]
   });
 };
 
-// Helper Functions
-
-const convertToDockerPath = (windowsPath) => {
-  if (os.platform() === 'win32') {
-    // Convert Windows path to Docker volume format
-    // C:\Users\... -> /c/Users/...
-    return windowsPath
-      .replace(/\\/g, '/')
-      .replace(/^([A-Za-z]):/, (match, drive) => `/${drive.toLowerCase()}`);
-  }
-  return windowsPath;
-};
+// Helper Functions (keep existing ones)
 
 // Check if document is complex and needs multiple passes
 const isComplexDocument = (content) => {
