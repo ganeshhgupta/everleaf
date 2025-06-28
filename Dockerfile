@@ -44,7 +44,7 @@ RUN groupadd -r appuser && useradd -r -g appuser appuser
 COPY everleaf-backend/package*.json ./
 
 # Install Node.js dependencies
-RUN npm ci --only=production --silent && npm cache clean --force
+RUN npm install --production --no-optional && npm cache clean --force
 
 # Copy application code
 COPY everleaf-backend/ ./
