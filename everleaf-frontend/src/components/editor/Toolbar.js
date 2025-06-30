@@ -7,7 +7,9 @@ import {
   ShareIcon,
   ArrowLeftIcon,
   PencilIcon,
-  CheckIcon
+  CheckIcon,
+  DocumentDuplicateIcon,
+  TrashIcon
 } from '@heroicons/react/24/outline';
 import { downloadTeX, downloadPDF } from '../../utils/latexUtils';
 
@@ -26,16 +28,23 @@ const Toolbar = ({
   onTitleSave,
   onTitleCancel,
   onCompile,
-  onNavigateBack
+  onNavigateBack,
+  onCloneProject,
+  onDeleteProject
 }) => {
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+  const [showActionsMenu, setShowActionsMenu] = useState(false);
   const downloadMenuRef = useRef(null);
+  const actionsMenuRef = useRef(null);
 
-  // Close download menu when clicking outside
+  // Close menus when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (downloadMenuRef.current && !downloadMenuRef.current.contains(event.target)) {
         setShowDownloadMenu(false);
+      }
+      if (actionsMenuRef.current && !actionsMenuRef.current.contains(event.target)) {
+        setShowActionsMenu(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -53,6 +62,7 @@ const Toolbar = ({
   const handleDownloadTeX = () => {
     downloadTeX(latexCode, activeFile);
     setShowDownloadMenu(false);
+    setShowActionsMenu(false);
   };
 
   const handleDownloadPDF = () => {
@@ -61,6 +71,17 @@ const Toolbar = ({
       alert('Please compile the document first to generate a PDF');
     }
     setShowDownloadMenu(false);
+    setShowActionsMenu(false);
+  };
+
+  const handleCloneProject = () => {
+    onCloneProject();
+    setShowActionsMenu(false);
+  };
+
+  const handleDeleteProject = () => {
+    setShowActionsMenu(false);
+    onDeleteProject();
   };
 
   return (
@@ -124,8 +145,7 @@ const Toolbar = ({
             <PlayIcon className="w-4 h-4 mr-2" />
             {isCompiling ? 'Compiling...' : 'Compile'}
           </button>
-        
-          
+
           {/* Download Button with Hover Menu */}
           <div className="relative" ref={downloadMenuRef}>
             <button
@@ -154,6 +174,53 @@ const Toolbar = ({
                 >
                   <DocumentArrowDownIcon className="w-4 h-4 text-gray-500" />
                   <span>Download as PDF</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Project Actions Menu */}
+          <div className="relative" ref={actionsMenuRef}>
+            <button
+              onClick={() => setShowActionsMenu(!showActionsMenu)}
+              className="inline-flex items-center p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+            >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+              </svg>
+            </button>
+            
+            {showActionsMenu && (
+              <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+                <button
+                  onClick={handleDownloadTeX}
+                  className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-3"
+                >
+                  <DocumentTextIcon className="w-4 h-4 text-gray-500" />
+                  <span>Download as .tex</span>
+                </button>
+                <button
+                  onClick={handleDownloadPDF}
+                  className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-3"
+                >
+                  <DocumentArrowDownIcon className="w-4 h-4 text-gray-500" />
+                  <span>Download as PDF</span>
+                </button>
+                <div className="border-t border-gray-100 my-1"></div>
+                <button
+                  onClick={handleCloneProject}
+                  className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-3"
+                >
+                  <DocumentDuplicateIcon className="w-4 h-4 text-gray-500" />
+                  <span>Make a copy</span>
+                </button>
+                <div className="border-t border-gray-100 my-1"></div>
+                <button
+                  onClick={handleDeleteProject}
+                  className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 flex items-center space-x-3"
+                >
+                  <TrashIcon className="w-4 h-4" />
+                  <span>Delete</span>
                 </button>
               </div>
             )}

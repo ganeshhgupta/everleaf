@@ -9,6 +9,7 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const multer = require('multer');
+const axios = require('axios'); // For Flask server health checks
 require('dotenv').config();
 
 // Import configurations and utilities
@@ -23,11 +24,18 @@ const projectRoutes = require('./routes/projects');
 const fileRoutes = require('./routes/files');
 const aiRoutes = require('./routes/ai');
 const latexRoutes = require('./routes/latex');
+const chatRoutes = require('./routes/chat');
+const chatPublicRoutes = require('./routes/chat-public'); // ADD THIS LINE
+const documentRoutes = require('./routes/documents');
+const ragRoutes = require('./routes/rag');
 
 // Create Express app and HTTP server
 const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 5000;
+
+// Flask LLM Server configuration
+const FLASK_SERVER_URL = process.env.FLASK_SERVER_URL || 'http://localhost:5001';
 
 // Initialize WebSocket manager
 let wsManager;
@@ -101,6 +109,18 @@ const generalLimiter = rateLimit({
 
 app.use(generalLimiter);
 
+// Stricter rate limiting for chat endpoints
+const chatLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 20, // limit each IP to 20 chat requests per minute
+  message: {
+    success: false,
+    message: 'Too many chat requests, please slow down.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -131,14 +151,33 @@ if (process.env.NODE_ENV === 'production') {
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// Health check endpoint
-app.get('/health', (req, res) => {
+// Flask server health check utility
+const checkFlaskServer = async () => {
+  try {
+    const response = await axios.get(`${FLASK_SERVER_URL}/health`, { timeout: 5000 });
+    return { status: 'connected', data: response.data };
+  } catch (error) {
+    return { 
+      status: 'disconnected', 
+      error: error.code || error.message || 'Unknown error' 
+    };
+  }
+};
+
+// Enhanced health check endpoint
+app.get('/health', async (req, res) => {
+  const flaskStatus = await checkFlaskServer();
+  
   res.json({
     success: true,
     message: 'Everleaf API is running',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
-    version: '1.0.0'
+    version: '1.0.0',
+    services: {
+      database: 'connected', // You might want to add actual DB health check
+      flask_llm: flaskStatus
+    }
   });
 });
 
@@ -149,6 +188,10 @@ app.use('/api/projects', projectRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/latex', latexRoutes);
+app.use('/api/documents', documentRoutes);
+app.use('/api/rag', ragRoutes);
+app.use('/api/chat-public', chatPublicRoutes); // ADD THIS LINE - Mount public routes first
+app.use('/api/chat', chatLimiter, chatRoutes); // Keep existing chat routes
 
 // WebSocket status endpoint
 app.get('/api/ws/status', (req, res) => {
@@ -262,6 +305,32 @@ const scheduleCleanup = () => {
   setTimeout(cleanup, 10000); // Wait 10 seconds after startup
 };
 
+// Check Flask server on startup
+const checkFlaskServerOnStartup = async () => {
+  console.log('🔍 Checking Flask LLM Server connection...');
+  const flaskStatus = await checkFlaskServer();
+  
+  if (flaskStatus.status === 'connected') {
+    console.log('✅ Flask LLM Server is running and accessible');
+    console.log(`🔗 Flask Server URL: ${FLASK_SERVER_URL}`);
+  } else {
+    console.log('⚠️  Flask LLM Server is not accessible');
+    console.log(`❌ Flask Server URL: ${FLASK_SERVER_URL}`);
+    console.log(`❌ Error: ${flaskStatus.error}`);
+    console.log('💡 Chat features will not work until Flask server is started');
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`
+🚀 To start the Flask LLM Server:
+   1. Navigate to your llm-server directory
+   2. Activate virtual environment: source venv/bin/activate
+   3. Install dependencies: pip install -r requirements.txt
+   4. Start server: python app.py
+      `);
+    }
+  }
+};
+
 // Start server
 const startServer = async () => {
   try {
@@ -278,6 +347,9 @@ const startServer = async () => {
     // Schedule cleanup tasks
     scheduleCleanup();
     
+    // Check Flask server
+    await checkFlaskServerOnStartup();
+    
     // Start listening
     server.listen(PORT, '0.0.0.0', () => {
 
@@ -288,6 +360,7 @@ const startServer = async () => {
 📊 Health check: http://localhost:${PORT}/health
 🔗 API base URL: http://localhost:${PORT}/api
 🔌 WebSocket support: ENABLED
+🤖 Chat integration: ENABLED
       `);
       
       if (process.env.NODE_ENV === 'development') {
@@ -302,6 +375,13 @@ const startServer = async () => {
    • GET  /api/projects/my-projects - Get user projects
    • POST /api/files/projects/:id/upload - Upload files
    • GET  /api/ws/status - WebSocket status
+   
+🤖 Chat API Endpoints:
+   • GET  /api/chat/conversation/project/:projectId - Get/create conversation
+   • GET  /api/chat/conversation/:conversationId/messages - Get messages
+   • POST /api/chat/conversation/:conversationId/message - Send message
+   • POST /api/chat/conversation/:conversationId/latex-assist - LaTeX assistance
+   • GET  /api/chat/conversations - Get user conversations
         `);
       }
     });

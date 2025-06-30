@@ -60,7 +60,8 @@ const FileTree = ({
 
   return (
     <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
-      <div className="p-3 border-b border-gray-200">
+      {/* Header with same height as editor header (px-4 py-2) */}
+      <div className="bg-white border-b border-gray-200 px-4 py-1.5 h-9.5">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-medium text-gray-900">Files</h3>
           <button className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors">

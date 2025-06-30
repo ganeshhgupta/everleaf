@@ -35,3 +35,13 @@ Thumbs.db
 # Temporary files
 tmp/
 temp/
+
+# Ignore LLM server environment file
+everleaf-backend/llm-server/.env
+everleaf-backend/llm-server/venv
+
+
+# Temporary or malformed files
+everleaf-frontend/Math.*
+everleaf-frontend/numPages* 
+everleaf-frontend/{ 

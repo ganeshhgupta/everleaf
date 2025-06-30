@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { projectAPI } from '../../services/api';
+import { downloadTeX, downloadPDF } from '../../utils/latexUtils';
 import {
   DocumentTextIcon,
   PlusIcon,
@@ -12,48 +14,181 @@ import {
   ArrowRightOnRectangleIcon,
   AcademicCapIcon,
   MagnifyingGlassIcon,
-  EllipsisHorizontalIcon
+  EllipsisHorizontalIcon,
+  ExclamationTriangleIcon,
+  DocumentArrowDownIcon,
+  DocumentDuplicateIcon,
+  TrashIcon
 } from '@heroicons/react/24/outline';
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
+  const [projects, setProjects] = useState([]);
+  const [collaboratedProjects, setCollaboratedProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [deleteModal, setDeleteModal] = useState({ isOpen: false, project: null });
 
-  // Mock data - replace with real data later
-  const recentProjects = [
-    {
-      id: 1,
-      title: 'Research Paper Draft',
-      lastModified: '2 hours ago',
-      collaborators: 3,
-      type: 'document'
-    },
-    {
-      id: 2,
-      title: 'Thesis Chapter 3',
-      lastModified: '1 day ago',
-      collaborators: 1,
-      type: 'document'
-    },
-    {
-      id: 3,
-      title: 'Conference Presentation',
-      lastModified: '3 days ago',
-      collaborators: 2,
-      type: 'presentation'
+  // Load projects on component mount
+  useEffect(() => {
+    loadProjects();
+  }, []);
+
+  const loadProjects = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const [myProjectsResponse, collaboratedResponse] = await Promise.all([
+        projectAPI.getMyProjects(1, 10),
+        projectAPI.getCollaboratedProjects(1, 5)
+      ]);
+
+      setProjects(myProjectsResponse.projects || []);
+      setCollaboratedProjects(collaboratedResponse.projects || []);
+    } catch (error) {
+      console.error('Failed to load projects:', error);
+      setError('Failed to load projects. Please try again.');
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
+
+  const generateUniqueTitle = (baseTitle, existingProjects) => {
+    const existingTitles = existingProjects.map(p => p.title);
+    
+    if (!existingTitles.includes(baseTitle)) {
+      return baseTitle;
+    }
+    
+    let counter = 2;
+    let newTitle = `${baseTitle} (${counter})`;
+    
+    while (existingTitles.includes(newTitle)) {
+      counter++;
+      newTitle = `${baseTitle} (${counter})`;
+    }
+    
+    return newTitle;
+  };
 
   const handleLogout = () => {
     logout();
   };
 
-  const handleCreateProject = () => {
-    // Create a new project ID (temporary - replace with backend call)
-    const newProjectId = Date.now();
-    navigate(`/editor/${newProjectId}`);
+  const handleCreateProject = async () => {
+    try {
+      setCreating(true);
+      
+      const baseTitle = `New Project ${new Date().toLocaleDateString()}`;
+      const uniqueTitle = generateUniqueTitle(baseTitle, [...projects, ...collaboratedProjects]);
+      
+      const projectData = {
+        title: uniqueTitle,
+        description: '',
+        content: '',
+        latexContent: ''
+      };
+
+      const response = await projectAPI.createProject(projectData);
+      
+      if (response.success) {
+        navigate(`/editor/${response.project.id}`);
+      } else {
+        setError('Failed to create project. Please try again.');
+      }
+    } catch (error) {
+      console.error('Failed to create project:', error);
+      setError('Failed to create project. Please try again.');
+    } finally {
+      setCreating(false);
+    }
   };
+
+  const handleProjectClick = (projectId) => {
+    navigate(`/editor/${projectId}`);
+  };
+
+  const handleDownloadTeX = async (project, event) => {
+    event.stopPropagation();
+    try {
+      const projectData = await projectAPI.getProject(project.id);
+      if (projectData.success) {
+        const content = projectData.project.latex_content || projectData.project.content || '';
+        downloadTeX(content, { name: 'main.tex' });
+      }
+    } catch (error) {
+      console.error('Failed to download TeX:', error);
+    }
+  };
+
+  const handleDownloadPDF = async (project, event) => {
+    event.stopPropagation();
+    // For now, show message that PDF needs to be compiled first
+    alert('Please open the project and compile it first to generate a PDF');
+  };
+
+  const handleCloneProject = async (project, event) => {
+    event.stopPropagation();
+    try {
+      const cloneTitle = generateUniqueTitle(`${project.title} (Copy)`, [...projects, ...collaboratedProjects]);
+      const response = await projectAPI.cloneProject(project.id, cloneTitle);
+      if (response.success) {
+        await loadProjects(); // Refresh project list
+        navigate(`/editor/${response.project.id}`);
+      }
+    } catch (error) {
+      console.error('Failed to clone project:', error);
+      setError('Failed to clone project. Please try again.');
+    }
+  };
+
+  const handleDeleteProject = async (project, event) => {
+    event.stopPropagation();
+    setDeleteModal({ isOpen: true, project });
+  };
+
+  const confirmDelete = async () => {
+    try {
+      await projectAPI.deleteProject(deleteModal.project.id);
+      await loadProjects(); // Refresh project list
+      setDeleteModal({ isOpen: false, project: null });
+    } catch (error) {
+      console.error('Failed to delete project:', error);
+      setError('Failed to delete project. Please try again.');
+      setDeleteModal({ isOpen: false, project: null });
+    }
+  };
+
+  const cancelDelete = () => {
+    setDeleteModal({ isOpen: false, project: null });
+  };
+
+  const formatTimeAgo = (dateString) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInHours = Math.floor((now - date) / (1000 * 60 * 60));
+    
+    if (diffInHours < 1) return 'Just now';
+    if (diffInHours < 24) return `${diffInHours} hours ago`;
+    
+    const diffInDays = Math.floor(diffInHours / 24);
+    if (diffInDays === 1) return '1 day ago';
+    if (diffInDays < 7) return `${diffInDays} days ago`;
+    
+    const diffInWeeks = Math.floor(diffInDays / 7);
+    if (diffInWeeks === 1) return '1 week ago';
+    if (diffInWeeks < 4) return `${diffInWeeks} weeks ago`;
+    
+    return date.toLocaleDateString();
+  };
+
+  const recentProjects = [...projects, ...collaboratedProjects]
+    .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
+    .slice(0, 5);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -69,7 +204,6 @@ const Dashboard = () => {
                 <span className="text-xl font-bold text-gray-900">Everleaf</span>
               </div>
               
-              {/* Search Bar */}
               <div className="hidden sm:block relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
@@ -87,21 +221,24 @@ const Dashboard = () => {
             <div className="flex items-center space-x-4">
               <button 
                 onClick={handleCreateProject}
-                className="btn-primary inline-flex items-center justify-center px-3 py-2 sm:px-4"
+                disabled={creating}
+                className="btn-primary inline-flex items-center justify-center px-3 py-2 sm:px-4 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <PlusIcon className="w-4 h-4 flex-shrink-0" />
-                <span className="ml-2 hidden sm:block font-medium">New Project</span>
+                <span className="ml-2 hidden sm:block font-medium">
+                  {creating ? 'Creating...' : 'New Project'}
+                </span>
               </button>
               
               <div className="relative">
                 <button className="flex items-center space-x-2 text-gray-700 hover:text-gray-900">
                   <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
                     <span className="text-sm font-medium text-primary-700">
-                      {user?.firstName?.charAt(0) || 'U'}
+                      {user?.firstName?.charAt(0) || user?.first_name?.charAt(0) || 'U'}
                     </span>
                   </div>
                   <span className="hidden sm:block font-medium">
-                    {user?.firstName} {user?.lastName}
+                    {user?.firstName || user?.first_name} {user?.lastName || user?.last_name}
                   </span>
                 </button>
               </div>
@@ -111,6 +248,24 @@ const Dashboard = () => {
       </nav>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Error Message */}
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center space-x-3"
+          >
+            <ExclamationTriangleIcon className="w-5 h-5 text-red-500" />
+            <span className="text-red-700">{error}</span>
+            <button 
+              onClick={() => setError(null)}
+              className="ml-auto text-red-500 hover:text-red-700"
+            >
+              ×
+            </button>
+          </motion.div>
+        )}
+
         {/* Welcome Section */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -119,7 +274,7 @@ const Dashboard = () => {
           className="mb-8"
         >
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Welcome back, {user?.firstName}!
+            Welcome back, {user?.firstName || user?.first_name}!
           </h1>
           <p className="text-gray-600">
             Ready to continue your research? Here are your recent projects.
@@ -198,7 +353,8 @@ const Dashboard = () => {
             <div className="grid sm:grid-cols-3 gap-4 mb-8">
               <button
                 onClick={handleCreateProject}
-                className="bg-white border-2 border-dashed border-gray-300 rounded-xl p-6 hover:border-primary-300 hover:bg-primary-50 transition-colors text-center group"
+                disabled={creating}
+                className="bg-white border-2 border-dashed border-gray-300 rounded-xl p-6 hover:border-primary-300 hover:bg-primary-50 transition-colors text-center group disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <PlusIcon className="w-8 h-8 text-gray-400 group-hover:text-primary-500 mx-auto mb-2" />
                 <h3 className="font-medium text-gray-900 group-hover:text-primary-700">New Project</h3>
@@ -224,47 +380,145 @@ const Dashboard = () => {
                 <h2 className="text-lg font-semibold text-gray-900">Recent Projects</h2>
               </div>
 
-              <div className="divide-y divide-gray-200">
-                {recentProjects.map((project) => (
-                  <div key={project.id} className="px-6 py-4 hover:bg-gray-50 cursor-pointer">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
-                          <DocumentTextIcon className="w-5 h-5 text-primary-600" />
-                        </div>
-                        <div>
-                          <h3 className="font-medium text-gray-900">{project.title}</h3>
-                          <div className="flex items-center space-x-4 text-sm text-gray-500">
-                            <span>Modified {project.lastModified}</span>
-                            <span className="flex items-center">
-                              <UserGroupIcon className="w-4 h-4 mr-1" />
-                              {project.collaborators} collaborators
-                            </span>
+              {loading ? (
+                <div className="px-6 py-12 text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mx-auto mb-4"></div>
+                  <p className="text-gray-500">Loading projects...</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-200">
+                  {recentProjects.map((project) => (
+                    <div 
+                      key={project.id} 
+                      className="px-6 py-4 hover:bg-gray-50 cursor-pointer group"
+                      onClick={() => handleProjectClick(project.id)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
+                            <DocumentTextIcon className="w-5 h-5 text-primary-600" />
+                          </div>
+                          <div>
+                            <h3 className="font-medium text-gray-900">{project.title}</h3>
+                            <div className="flex items-center space-x-4 text-sm text-gray-500">
+                              <span>Modified {formatTimeAgo(project.updated_at)}</span>
+                              {project.collaborator_count > 0 && (
+                                <span className="flex items-center">
+                                  <UserGroupIcon className="w-4 h-4 mr-1" />
+                                  {project.collaborator_count} collaborators
+                                </span>
+                              )}
+                              {project.owner_first_name && (
+                                <span>by {project.owner_first_name} {project.owner_last_name}</span>
+                              )}
+                            </div>
                           </div>
                         </div>
+                        
+                        {/* Project Action Icons */}
+                        <div className="flex items-center space-x-2">
+                          <button 
+                            className="relative p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors group"
+                            onClick={(e) => handleDownloadTeX(project, e)}
+                          >
+                            <DocumentTextIcon className="w-5 h-5 font-bold stroke-2" />
+                            <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-800 text-white text-sm rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-20 shadow-lg">
+                              Download as .tex
+                              <span className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></span>
+                            </span>
+                          </button>
+                          <button 
+                            className="relative p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors group"
+                            onClick={(e) => handleDownloadPDF(project, e)}
+                          >
+                            <DocumentArrowDownIcon className="w-5 h-5 font-bold stroke-2" />
+                            <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-800 text-white text-sm rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-20 shadow-lg">
+                              Download as PDF
+                              <span className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></span>
+                            </span>
+                          </button>
+                          <button 
+                            className="relative p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors group"
+                            onClick={(e) => handleCloneProject(project, e)}
+                          >
+                            <DocumentDuplicateIcon className="w-5 h-5 font-bold stroke-2" />
+                            <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-800 text-white text-sm rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-20 shadow-lg">
+                              Make a copy
+                              <span className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></span>
+                            </span>
+                          </button>
+                          <button 
+                            className="relative p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors group"
+                            onClick={(e) => handleDeleteProject(project, e)}
+                          >
+                            <TrashIcon className="w-5 h-5 font-bold stroke-2" />
+                            <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-800 text-white text-sm rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-20 shadow-lg">
+                              Delete
+                              <span className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></span>
+                            </span>
+                          </button>
+                        </div>
                       </div>
-                      <button className="text-gray-400 hover:text-gray-600">
-                        <EllipsisHorizontalIcon className="w-5 h-5" />
+                    </div>
+                  ))}
+
+                  {recentProjects.length === 0 && !loading && (
+                    <div className="px-6 py-12 text-center">
+                      <DocumentTextIcon className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">No projects yet</h3>
+                      <p className="text-gray-500 mb-4">Create your first project to get started</p>
+                      <button 
+                        onClick={handleCreateProject} 
+                        disabled={creating}
+                        className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {creating ? 'Creating...' : 'Create Project'}
                       </button>
                     </div>
-                  </div>
-                ))}
-              </div>
-
-              {recentProjects.length === 0 && (
-                <div className="px-6 py-12 text-center">
-                  <DocumentTextIcon className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No projects yet</h3>
-                  <p className="text-gray-500 mb-4">Create your first project to get started</p>
-                  <button onClick={handleCreateProject} className="btn-primary">
-                    Create Project
-                  </button>
+                  )}
                 </div>
               )}
             </div>
           </motion.div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteModal.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                <ExclamationTriangleIcon className="w-6 h-6 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Delete Project</h3>
+                <p className="text-sm text-gray-500">This action cannot be undone</p>
+              </div>
+            </div>
+            
+            <p className="text-gray-700 mb-6">
+              Are you sure you want to delete <span className="font-medium">"{deleteModal.project?.title}"</span>? 
+              All project data will be permanently removed.
+            </p>
+            
+            <div className="flex space-x-3 justify-end">
+              <button
+                onClick={cancelDelete}
+                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded-md transition-colors"
+              >
+                Delete Project
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
