@@ -375,9 +375,9 @@ Select text in the editor and I'll help improve it, or just ask me anything!`,
       setDocumentsLoading(true);
       const response = await api.get(`/documents/${projectId}`);
       
-      if (response.success) {
-        setDocuments(response.documents);
-        console.log(`Loaded ${response.documents.length} documents`);
+      if (response.data.success) {
+        setDocuments(response.data.documents);
+        console.log(`Loaded ${response.data.documents.length} documents`);
       }
     } catch (error) {
       console.error('Failed to load documents:', error);
@@ -386,55 +386,57 @@ Select text in the editor and I'll help improve it, or just ask me anything!`,
     }
   };
 
+  // Load project data from API - FIXED: Properly placed inside component
+  const loadProject = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      console.log('Loading project:', projectId);
+      const response = await api.get(`/projects/${projectId}`);
+      
+      console.log('🔍 Full API response:', response);
+      console.log('🔍 Response data:', response.data);
+      console.log('🔍 Response structure:', Object.keys(response.data));
+      
+      let projectData = null;
+      
+      // Check different possible response formats
+      if (response.data.success && response.data.project) {
+        // Format: { success: true, project: {...} }
+        projectData = response.data.project;
+        console.log('✅ Using success/project format');
+      } else if (response.data.data) {
+        // Format: { data: {...} }
+        projectData = response.data.data;
+        console.log('✅ Using data format');
+      } else if (response.data.id) {
+        // Format: direct project object
+        projectData = response.data;
+        console.log('✅ Using direct object format');
+      } else {
+        console.error('❌ Unexpected response format:', response.data);
+        setError('Unexpected response format from server');
+        return;
+      }
+      
+      setProject(projectData);
+      
+      const content = projectData.latex_content || projectData.content || sampleLatex;
+      setLatexCode(content);
+      
+      console.log('✅ Project loaded successfully:', projectData.title);
+    } catch (error) {
+      console.error('❌ Error loading project:', error);
+      console.error('❌ Error response:', error.response?.data);
+      setError('Failed to load project. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Load project data from API
   useEffect(() => {
-// In LaTeXEditor.js, around line 350-360, update the loadProject function:
-const loadProject = async () => {
-  try {
-    setLoading(true);
-    setError(null);
-    
-    console.log('Loading project:', projectId);
-    const response = await api.get(`/projects/${projectId}`);
-    
-    console.log('🔍 Full API response:', response);
-    console.log('🔍 Response data:', response.data);
-    console.log('🔍 Response structure:', Object.keys(response.data));
-    
-    // Check different possible response formats
-    if (response.data.success && response.data.project) {
-      // Format: { success: true, project: {...} }
-      const projectData = response.data.project;
-      setProject(projectData);
-      console.log('✅ Using success/project format');
-    } else if (response.data.data) {
-      // Format: { data: {...} }
-      const projectData = response.data.data;
-      setProject(projectData);
-      console.log('✅ Using data format');
-    } else if (response.data.id) {
-      // Format: direct project object
-      setProject(response.data);
-      console.log('✅ Using direct object format');
-    } else {
-      console.error('❌ Unexpected response format:', response.data);
-      setError('Unexpected response format from server');
-      return;
-    }
-    
-    const content = projectData.latex_content || projectData.content || sampleLatex;
-    setLatexCode(content);
-    
-    console.log('✅ Project loaded successfully');
-  } catch (error) {
-    console.error('❌ Error loading project:', error);
-    console.error('❌ Error response:', error.response?.data);
-    setError('Failed to load project. Please try again.');
-  } finally {
-    setLoading(false);
-  }
-};
-
     if (projectId) {
       loadProject();
       loadDocuments();
@@ -788,8 +790,8 @@ const loadProject = async () => {
   const handleCloneProject = async () => {
     try {
       const response = await api.post(`/projects/${projectId}/clone`, { title: `${project.title} (Copy)` });
-      if (response.success) {
-        navigate(`/editor/${response.project.id}`);
+      if (response.data.success) {
+        navigate(`/editor/${response.data.project.id}`);
       }
     } catch (error) {
       console.error('Failed to clone project:', error);
