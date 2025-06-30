@@ -839,7 +839,9 @@ def query_context_legacy():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    port = int(os.getenv('PORT', 5001))  # Default to 5001, configurable via .env
+    port = int(os.getenv('PORT', 5001))
+    print(f"🚀 Starting Flask server on port {port}")
+    app.run(host='0.0.0.0', port=port, debug=False)
     
     missing_configs = []
     if not GROQ_API_KEY:
