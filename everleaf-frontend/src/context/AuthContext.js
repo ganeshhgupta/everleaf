@@ -15,30 +15,97 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Configure axios defaults - FIXED: Added 'axios.' prefix
-  axios.defaults.baseURL = `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api`;
+  // Create a dedicated axios instance instead of using defaults
+  const api = axios.create({
+    baseURL: `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api`,
+    timeout: 15000, // 15 second timeout to handle Render cold starts
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
 
-  console.log('🔍 Axios baseURL set to:', axios.defaults.baseURL);
+  console.log('🔍 Axios baseURL set to:', api.defaults.baseURL);
   console.log('🔍 Environment variable:', process.env.REACT_APP_API_URL);
 
-  useEffect(() => {
-    const token = Cookies.get('token');
-    if (token) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      verifyToken();
-    } else {
-      setLoading(false);
+  // Request interceptor to add auth token
+  api.interceptors.request.use(
+    (config) => {
+      const token = Cookies.get('token');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      return config;
+    },
+    (error) => Promise.reject(error)
+  );
+
+  // Response interceptor for error handling
+  api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      if (error.code === 'ECONNABORTED') {
+        console.error('Request timeout - server may be sleeping (Render cold start)');
+        setError('Server is starting up, please wait a moment and try again...');
+      } else if (error.response?.status === 401) {
+        console.log('Token invalid, clearing auth state');
+        logout();
+      } else if (!error.response) {
+        console.error('Network error - server may be down');
+        setError('Unable to connect to server. Please check your connection.');
+      }
+      return Promise.reject(error);
     }
-  }, []);
+  );
+
+  useEffect(() => {
+    let mounted = true;
+    
+    const initializeAuth = async () => {
+      const token = Cookies.get('token');
+      if (token && mounted) {
+        await verifyToken();
+      } else if (mounted) {
+        setLoading(false);
+      }
+    };
+
+    initializeAuth();
+
+    return () => {
+      mounted = false;
+    };
+  }, []); // Only run once on mount
 
   const verifyToken = async () => {
     try {
-      const response = await axios.get('/auth/verify');
-      setUser(response.data.user);
+      setError(null); // Clear any previous errors
+      const response = await api.get('/auth/verify');
+      
+      if (response.data.success) {
+        setUser(response.data.user);
+        console.log('Token verified successfully');
+      } else {
+        throw new Error('Token verification failed');
+      }
     } catch (error) {
       console.error('Token verification failed:', error);
-      logout();
+      
+      // Handle different error types
+      if (error.code === 'ECONNABORTED') {
+        setError('Server is starting up, please wait...');
+        // Don't logout on timeout - server might just be cold starting
+      } else if (error.response?.status === 401) {
+        setError('Session expired. Please log in again.');
+        logout();
+      } else if (!error.response) {
+        setError('Unable to connect to server. Please check your connection.');
+        // Don't logout on network error - might be temporary
+      } else {
+        setError('Authentication failed. Please try logging in again.');
+        logout();
+      }
     } finally {
       setLoading(false);
     }
@@ -46,101 +113,176 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password, isAdmin = false) => {
     try {
+      setError(null);
+      setLoading(true);
+      
       const endpoint = isAdmin ? '/auth/admin/login' : '/auth/login';
-      const response = await axios.post(endpoint, { email, password });
+      const response = await api.post(endpoint, { email, password });
       
       const { token, user: userData } = response.data;
       
-      // Set token in cookies and axios headers
+      // Set token in cookies
       Cookies.set('token', token, { expires: 7 }); // 7 days
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      
       setUser(userData);
+      
+      console.log('Login successful');
       return { success: true };
     } catch (error) {
-      return { 
-        success: false, 
-        error: error.response?.data?.message || 'Login failed' 
-      };
+      console.error('Login error:', error);
+      
+      let errorMessage = 'Login failed. Please try again.';
+      
+      if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Server is starting up, please wait a moment and try again...';
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (!error.response) {
+        errorMessage = 'Unable to connect to server. Please check your connection.';
+      }
+      
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
     }
   };
 
   const signup = async (userData) => {
     try {
-      const response = await axios.post('/auth/signup', userData);
+      setError(null);
+      setLoading(true);
+      
+      const response = await api.post('/auth/signup', userData);
       const { token, user: newUser } = response.data;
       
-      // Set token in cookies and axios headers
+      // Set token in cookies
       Cookies.set('token', token, { expires: 7 });
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      
       setUser(newUser);
+      
+      console.log('Signup successful');
       return { success: true };
     } catch (error) {
-      return { 
-        success: false, 
-        error: error.response?.data?.message || 'Signup failed' 
-      };
+      console.error('Signup error:', error);
+      
+      let errorMessage = 'Signup failed. Please try again.';
+      
+      if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Server is starting up, please wait a moment and try again...';
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (!error.response) {
+        errorMessage = 'Unable to connect to server. Please check your connection.';
+      }
+      
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
     }
   };
 
   const logout = () => {
     Cookies.remove('token');
-    delete axios.defaults.headers.common['Authorization'];
     setUser(null);
+    setError(null);
+    console.log('User logged out');
   };
 
   const forgotPassword = async (email) => {
     try {
-      await axios.post('/auth/forgot-password', { email });
+      setError(null);
+      await api.post('/auth/forgot-password', { email });
       return { success: true };
     } catch (error) {
-      return { 
-        success: false, 
-        error: error.response?.data?.message || 'Failed to send reset email' 
-      };
+      let errorMessage = 'Failed to send reset email';
+      
+      if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Server is starting up, please wait a moment and try again...';
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (!error.response) {
+        errorMessage = 'Unable to connect to server. Please check your connection.';
+      }
+      
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
     }
   };
 
   const resetPassword = async (token, password) => {
     try {
-      await axios.post('/auth/reset-password', { token, password });
+      setError(null);
+      await api.post('/auth/reset-password', { token, password });
       return { success: true };
     } catch (error) {
-      return { 
-        success: false, 
-        error: error.response?.data?.message || 'Failed to reset password' 
-      };
+      let errorMessage = 'Failed to reset password';
+      
+      if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Server is starting up, please wait a moment and try again...';
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (!error.response) {
+        errorMessage = 'Unable to connect to server. Please check your connection.';
+      }
+      
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
     }
   };
 
   const googleLogin = async (credential) => {
     try {
-      const response = await axios.post('/auth/google', { credential });
+      setError(null);
+      setLoading(true);
+      
+      const response = await api.post('/auth/google', { credential });
       const { token, user: userData } = response.data;
       
       Cookies.set('token', token, { expires: 7 });
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      
       setUser(userData);
+      
+      console.log('Google login successful');
       return { success: true };
     } catch (error) {
-      return { 
-        success: false, 
-        error: error.response?.data?.message || 'Google login failed' 
-      };
+      console.error('Google login error:', error);
+      
+      let errorMessage = 'Google login failed';
+      
+      if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Server is starting up, please wait a moment and try again...';
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (!error.response) {
+        errorMessage = 'Unable to connect to server. Please check your connection.';
+      }
+      
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Function to retry connection (useful for UI)
+  const retryConnection = async () => {
+    if (Cookies.get('token')) {
+      setLoading(true);
+      await verifyToken();
     }
   };
 
   const value = {
     user,
     loading,
+    error,
     login,
     signup,
     logout,
     forgotPassword,
     resetPassword,
-    googleLogin
+    googleLogin,
+    retryConnection,
+    api // Export api instance for use in other components
   };
 
   return (
