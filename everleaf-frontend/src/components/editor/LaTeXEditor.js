@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { projectAPI, documentAPI } from '../../services/api';
+//import { projectAPI, documentAPI } from '../../services/api';
 import Toolbar from './Toolbar';
 import FileTree from './FileTree';
 import EditorPanel from './EditorPanel';
@@ -14,6 +14,7 @@ import useResizeObserverFix from '../../hooks/useResizeObserverFix';
 import { sampleLatex, sampleBibliography, getSampleChapterContent } from '../../utils/latexUtils';
 
 const LaTeXEditor = () => {
+  const { api } = useAuth();
   const { projectId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -372,7 +373,7 @@ Select text in the editor and I'll help improve it, or just ask me anything!`,
   const loadDocuments = async () => {
     try {
       setDocumentsLoading(true);
-      const response = await documentAPI.getProjectDocuments(projectId);
+      const response = await api.get(`/documents/${projectId}`);
       
       if (response.success) {
         setDocuments(response.documents);
@@ -393,7 +394,7 @@ Select text in the editor and I'll help improve it, or just ask me anything!`,
         setError(null);
         
         console.log('Loading project:', projectId);
-        const response = await projectAPI.getProject(projectId);
+        const response = await api.get(`/projects/${projectId}`);
         
         if (response.success) {
           const projectData = response.project;
@@ -457,7 +458,7 @@ Select text in the editor and I'll help improve it, or just ask me anything!`,
         updates.title = title;
       }
       
-      await projectAPI.updateProject(projectId, updates);
+      await api.put(`/projects/${projectId}`, updates);
       console.log('Project saved successfully');
     } catch (error) {
       console.error('Failed to save project:', error);
@@ -743,7 +744,7 @@ Select text in the editor and I'll help improve it, or just ask me anything!`,
   const handleDeleteDocument = async (documentId) => {
     if (window.confirm('Are you sure you want to delete this document? This will also remove its embeddings.')) {
       try {
-        await documentAPI.deleteDocument(projectId, documentId);
+        await api.delete(`/documents/${projectId}/${documentId}`);
         setDocuments(prev => prev.filter(doc => doc.id !== documentId));
         console.log('Document deleted successfully');
       } catch (error) {
@@ -755,7 +756,7 @@ Select text in the editor and I'll help improve it, or just ask me anything!`,
 
   const handleReprocessDocument = async (documentId) => {
     try {
-      await documentAPI.reprocessDocument(projectId, documentId);
+      await api.post(`/documents/${projectId}/${documentId}/reprocess`);
       loadDocuments();
       console.log('Document reprocessing started');
     } catch (error) {
@@ -767,7 +768,7 @@ Select text in the editor and I'll help improve it, or just ask me anything!`,
   // Project actions
   const handleCloneProject = async () => {
     try {
-      const response = await projectAPI.cloneProject(projectId, `${project.title} (Copy)`);
+      const response = await api.post(`/projects/${projectId}/clone`, { title: `${project.title} (Copy)` });
       if (response.success) {
         navigate(`/editor/${response.project.id}`);
       }
@@ -779,7 +780,7 @@ Select text in the editor and I'll help improve it, or just ask me anything!`,
   const handleDeleteProject = async () => {
     if (window.confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
       try {
-        await projectAPI.deleteProject(projectId);
+        await api.delete(`/projects/${projectId}`);
         navigate('/dashboard');
       } catch (error) {
         console.error('Failed to delete project:', error);

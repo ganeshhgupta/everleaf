@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { projectAPI } from '../../services/api';
 import { downloadTeX, downloadPDF } from '../../utils/latexUtils';
 import {
   DocumentTextIcon,
@@ -22,7 +21,7 @@ import {
 } from '@heroicons/react/24/outline';
 
 const Dashboard = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, api } = useAuth(); // Get api instance from AuthContext
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [projects, setProjects] = useState([]);
@@ -42,15 +41,22 @@ const Dashboard = () => {
       setLoading(true);
       setError(null);
 
+      console.log('🔄 Loading projects...');
+
       const [myProjectsResponse, collaboratedResponse] = await Promise.all([
-        projectAPI.getMyProjects(1, 10),
-        projectAPI.getCollaboratedProjects(1, 5)
+        api.get('/projects/my-projects', { params: { page: 1, limit: 10 } }),
+        api.get('/projects/collaborated', { params: { page: 1, limit: 5 } })
       ]);
 
-      setProjects(myProjectsResponse.projects || []);
-      setCollaboratedProjects(collaboratedResponse.projects || []);
+      console.log('📊 My projects response:', myProjectsResponse.data);
+      console.log('📊 Collaborated projects response:', collaboratedResponse.data);
+
+      setProjects(myProjectsResponse.data.projects || []);
+      setCollaboratedProjects(collaboratedResponse.data.projects || []);
+      
+      console.log('✅ Projects loaded successfully');
     } catch (error) {
-      console.error('Failed to load projects:', error);
+      console.error('❌ Failed to load projects:', error);
       setError('Failed to load projects. Please try again.');
     } finally {
       setLoading(false);
@@ -93,15 +99,19 @@ const Dashboard = () => {
         latexContent: ''
       };
 
-      const response = await projectAPI.createProject(projectData);
+      console.log('🔨 Creating project:', projectData);
+
+      const response = await api.post('/projects', projectData);
       
-      if (response.success) {
-        navigate(`/editor/${response.project.id}`);
+      console.log('✅ Project created:', response.data);
+
+      if (response.data.success) {
+        navigate(`/editor/${response.data.project.id}`);
       } else {
         setError('Failed to create project. Please try again.');
       }
     } catch (error) {
-      console.error('Failed to create project:', error);
+      console.error('❌ Failed to create project:', error);
       setError('Failed to create project. Please try again.');
     } finally {
       setCreating(false);
@@ -115,13 +125,17 @@ const Dashboard = () => {
   const handleDownloadTeX = async (project, event) => {
     event.stopPropagation();
     try {
-      const projectData = await projectAPI.getProject(project.id);
-      if (projectData.success) {
-        const content = projectData.project.latex_content || projectData.project.content || '';
+      console.log('⬇️ Downloading TeX for project:', project.id);
+      
+      const response = await api.get(`/projects/${project.id}`);
+      
+      if (response.data.success) {
+        const content = response.data.project.latex_content || response.data.project.content || '';
         downloadTeX(content, { name: 'main.tex' });
+        console.log('✅ TeX download initiated');
       }
     } catch (error) {
-      console.error('Failed to download TeX:', error);
+      console.error('❌ Failed to download TeX:', error);
     }
   };
 
@@ -135,13 +149,18 @@ const Dashboard = () => {
     event.stopPropagation();
     try {
       const cloneTitle = generateUniqueTitle(`${project.title} (Copy)`, [...projects, ...collaboratedProjects]);
-      const response = await projectAPI.cloneProject(project.id, cloneTitle);
-      if (response.success) {
+      
+      console.log('📋 Cloning project:', project.id, 'with title:', cloneTitle);
+      
+      const response = await api.post(`/projects/${project.id}/clone`, { title: cloneTitle });
+      
+      if (response.data.success) {
+        console.log('✅ Project cloned successfully');
         await loadProjects(); // Refresh project list
-        navigate(`/editor/${response.project.id}`);
+        navigate(`/editor/${response.data.project.id}`);
       }
     } catch (error) {
-      console.error('Failed to clone project:', error);
+      console.error('❌ Failed to clone project:', error);
       setError('Failed to clone project. Please try again.');
     }
   };
@@ -153,11 +172,15 @@ const Dashboard = () => {
 
   const confirmDelete = async () => {
     try {
-      await projectAPI.deleteProject(deleteModal.project.id);
+      console.log('🗑️ Deleting project:', deleteModal.project.id);
+      
+      await api.delete(`/projects/${deleteModal.project.id}`);
+      
+      console.log('✅ Project deleted successfully');
       await loadProjects(); // Refresh project list
       setDeleteModal({ isOpen: false, project: null });
     } catch (error) {
-      console.error('Failed to delete project:', error);
+      console.error('❌ Failed to delete project:', error);
       setError('Failed to delete project. Please try again.');
       setDeleteModal({ isOpen: false, project: null });
     }

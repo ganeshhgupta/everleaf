@@ -1,0 +1,10 @@
+../Dockerfile
+../../Dockerfile
+Dockerfile
+../src/
+../package.json
+../package-lock.json
+../.env
+!requirements.txt
+!app.py
+!*.py
