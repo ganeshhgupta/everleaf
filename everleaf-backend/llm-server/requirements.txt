@@ -1,37 +1,9 @@
-# Core Flask dependencies
-Flask==3.0.3
-Werkzeug==3.0.4
-
-# Database
-SQLAlchemy==2.0.36
-Flask-SQLAlchemy==3.1.1
-Flask-Migrate==4.0.7
-
-# Authentication & Security
-Flask-JWT-Extended==4.6.0
-Flask-CORS==4.0.1
-argon2-cffi==23.1.0
-
-# Configuration
-python-dotenv==1.0.1# Core Flask
 Flask==3.0.3
 flask-cors==4.0.1
-
-# Environment variables
 python-dotenv==1.0.1
-
-# HTTP requests (for Groq API)
 requests==2.32.3
-
-# Database (PostgreSQL)
 psycopg2-binary==2.9.9
-
-# Vector database (Pinecone)
 pinecone-client==3.2.2
-
-# ML/Embeddings
 sentence-transformers==2.7.0
 numpy==1.26.4
-
-# Production server
 gunicorn==22.0.0

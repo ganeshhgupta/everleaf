@@ -17,13 +17,7 @@ const api = axios.create({
 // Request interceptor to add auth token
 api.interceptors.request.use(
   (config) => {
-    // Get token from localStorage
-    const token = localStorage.getItem('authToken') || localStorage.getItem('token');
-    
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    
+    // Token is already set in axios defaults by AuthContext
     return config;
   },
   (error) => {
@@ -36,19 +30,6 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     console.error('API Error:', error.response?.data || error.message);
-    
-    // Handle 401 errors (unauthorized)
-    if (error.response?.status === 401) {
-      // Token might be expired or invalid
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('token');
-      
-      // Redirect to login if not already there
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
-    }
-    
     return Promise.reject(error);
   }
 );
