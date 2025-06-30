@@ -388,33 +388,52 @@ Select text in the editor and I'll help improve it, or just ask me anything!`,
 
   // Load project data from API
   useEffect(() => {
-    const loadProject = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        console.log('Loading project:', projectId);
-        const response = await api.get(`/projects/${projectId}`);
-        
-        if (response.success) {
-          const projectData = response.project;
-          setProject(projectData);
-          
-          const content = projectData.latex_content || projectData.content || sampleLatex;
-          setLatexCode(content);
-          
-          console.log('Project loaded:', projectData.title);
-          console.log('Content length:', content.length);
-        } else {
-          setError('Failed to load project');
-        }
-      } catch (error) {
-        console.error('Error loading project:', error);
-        setError('Failed to load project. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    };
+// In LaTeXEditor.js, around line 350-360, update the loadProject function:
+const loadProject = async () => {
+  try {
+    setLoading(true);
+    setError(null);
+    
+    console.log('Loading project:', projectId);
+    const response = await api.get(`/projects/${projectId}`);
+    
+    console.log('🔍 Full API response:', response);
+    console.log('🔍 Response data:', response.data);
+    console.log('🔍 Response structure:', Object.keys(response.data));
+    
+    // Check different possible response formats
+    if (response.data.success && response.data.project) {
+      // Format: { success: true, project: {...} }
+      const projectData = response.data.project;
+      setProject(projectData);
+      console.log('✅ Using success/project format');
+    } else if (response.data.data) {
+      // Format: { data: {...} }
+      const projectData = response.data.data;
+      setProject(projectData);
+      console.log('✅ Using data format');
+    } else if (response.data.id) {
+      // Format: direct project object
+      setProject(response.data);
+      console.log('✅ Using direct object format');
+    } else {
+      console.error('❌ Unexpected response format:', response.data);
+      setError('Unexpected response format from server');
+      return;
+    }
+    
+    const content = projectData.latex_content || projectData.content || sampleLatex;
+    setLatexCode(content);
+    
+    console.log('✅ Project loaded successfully');
+  } catch (error) {
+    console.error('❌ Error loading project:', error);
+    console.error('❌ Error response:', error.response?.data);
+    setError('Failed to load project. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+};
 
     if (projectId) {
       loadProject();
