@@ -246,18 +246,7 @@ const ChatPanel = ({
 
   if (isCollapsed) {
     return (
-      <div className="w-12 bg-gray-50 border-l border-gray-200 flex flex-col items-center justify-start pt-4">
-        <button 
-          className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
-          onClick={onToggleCollapse}
-          title="Open AI LaTeX Assistant"
-        >
-          <ChatBubbleLeftRightIcon className="w-5 h-5" />
-        </button>
-        <div className="mt-2 w-2 h-2 bg-green-500 rounded-full" title="AI Assistant Ready"></div>
-        {ragEnabled && (
-          <div className="mt-1 w-2 h-2 bg-blue-500 rounded-full" title="RAG Mode Active"></div>
-        )}
+      <div className="w-1 bg-gray-50 border-l border-gray-200 flex flex-col items-center justify-start pt-4">
       </div>
     );
   }

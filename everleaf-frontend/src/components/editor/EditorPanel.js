@@ -168,7 +168,7 @@ Hello World!
         transition: isResizing ? 'none' : 'width 0.3s ease'
       }}
     >
-      <div className="bg-white border-b border-gray-200 px-4 py-2">
+      <div className="bg-white border-b border-gray-200 px-4 py-2 h-9">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <CodeBracketIcon className="w-4 h-4 text-gray-500" />

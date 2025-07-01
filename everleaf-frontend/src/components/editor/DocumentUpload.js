@@ -525,9 +525,6 @@ const DocumentUpload = ({ projectId, onDocumentsUploaded, documents = [], onDele
               <span className="font-medium">
                 {dragActive ? 'Drop files here' : 'Upload'}
               </span>
-              <span className="text-xs text-gray-500 mt-1 text-center">
-                or drag & drop PDFs
-              </span>
             </button>
             <button
               onClick={() => setShowUrlDialog(true)}
@@ -536,9 +533,6 @@ const DocumentUpload = ({ projectId, onDocumentsUploaded, documents = [], onDele
             >
               <Link className="w-6 h-6 mb-2" />
               <span className="font-medium">Links</span>
-              <span className="text-xs text-gray-500 mt-1">
-                from URLs
-              </span>
             </button>
           </div>
 
