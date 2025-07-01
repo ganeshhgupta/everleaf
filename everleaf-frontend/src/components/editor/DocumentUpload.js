@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
+import { useAuth } from '../../context/AuthContext'; // Add this import
 import { 
   ArrowUpTrayIcon as Upload, 
   LinkIcon as Link, 
@@ -10,6 +11,7 @@ import {
 } from '@heroicons/react/24/outline';
 
 const DocumentUpload = ({ projectId, onDocumentsUploaded, documents = [], onDeleteDocument, onReprocessDocument }) => {
+  const { api } = useAuth(); // Add this line
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [showUrlDialog, setShowUrlDialog] = useState(false);
@@ -18,7 +20,7 @@ const DocumentUpload = ({ projectId, onDocumentsUploaded, documents = [], onDele
   
   const fileInputRef = useRef();
 
-  // Define uploadFiles first
+  // Updated uploadFiles function to use api instance
   const uploadFiles = useCallback(async (files) => {
     console.log('📤 Starting file upload process...', files.length, 'files');
     setUploading(true);
@@ -32,22 +34,21 @@ const DocumentUpload = ({ projectId, onDocumentsUploaded, documents = [], onDele
       });
 
       console.log('🌐 Sending upload request to server...');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/documents/${projectId}/upload`, {
-        method: 'POST',
-        body: formData,
-        credentials: 'include'
+      const response = await api.post(`/documents/${projectId}/upload`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        }
       });
 
       console.log('📨 Upload response status:', response.status);
-      const result = await response.json();
-      console.log('📨 Upload response data:', result);
+      console.log('📨 Upload response data:', response.data);
       
-      if (result.success) {
+      if (response.data.success) {
         console.log('✅ Upload successful, notifying parent component...');
-        onDocumentsUploaded && onDocumentsUploaded(result.documents);
+        onDocumentsUploaded && onDocumentsUploaded(response.data.documents);
       } else {
-        console.error('❌ Upload failed:', result.message);
-        alert(result.message || 'Upload failed');
+        console.error('❌ Upload failed:', response.data.message);
+        alert(response.data.message || 'Upload failed');
       }
     } catch (error) {
       console.error('❌ Upload error:', error);
@@ -56,7 +57,7 @@ const DocumentUpload = ({ projectId, onDocumentsUploaded, documents = [], onDele
       console.log('🏁 Upload process completed');
       setUploading(false);
     }
-  }, [projectId, onDocumentsUploaded]);
+  }, [projectId, onDocumentsUploaded, api]); // Add api to dependencies
 
   // Now handleFiles can reference uploadFiles
   const handleFiles = useCallback(async (fileList) => {
@@ -128,6 +129,7 @@ const DocumentUpload = ({ projectId, onDocumentsUploaded, documents = [], onDele
     }
   }, []);
 
+  // Updated uploadFromUrls function to use api instance
   const uploadFromUrls = async () => {
     const validUrls = urls.filter(url => url.trim());
     
@@ -144,31 +146,25 @@ const DocumentUpload = ({ projectId, onDocumentsUploaded, documents = [], onDele
     
     try {
       console.log('🌐 Sending URL upload request to server...');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/documents/${projectId}/upload-urls`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ urls: validUrls }),
-        credentials: 'include'
+      const response = await api.post(`/documents/${projectId}/upload-urls`, {
+        urls: validUrls
       });
 
       console.log('📨 URL upload response status:', response.status);
-      const result = await response.json();
-      console.log('📨 URL upload response data:', result);
+      console.log('📨 URL upload response data:', response.data);
       
-      if (result.success) {
+      if (response.data.success) {
         console.log('✅ URL upload successful');
-        onDocumentsUploaded && onDocumentsUploaded(result.documents);
-        if (result.failed && result.failed.length > 0) {
-          console.warn(`⚠️ Some URLs failed: ${result.failed.length}`);
-          alert(`${result.documents.length} documents uploaded successfully. ${result.failed.length} URLs failed.`);
+        onDocumentsUploaded && onDocumentsUploaded(response.data.documents);
+        if (response.data.failed && response.data.failed.length > 0) {
+          console.warn(`⚠️ Some URLs failed: ${response.data.failed.length}`);
+          alert(`${response.data.documents.length} documents uploaded successfully. ${response.data.failed.length} URLs failed.`);
         }
         setShowUrlDialog(false);
         setUrls(['']);
       } else {
-        console.error('❌ URL upload failed:', result.message);
-        alert(result.message || 'Upload failed');
+        console.error('❌ URL upload failed:', response.data.message);
+        alert(response.data.message || 'Upload failed');
       }
     } catch (error) {
       console.error('❌ URL upload error:', error);

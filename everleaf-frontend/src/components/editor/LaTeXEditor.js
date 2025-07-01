@@ -499,40 +499,20 @@ Select text in the editor and I'll help improve it, or just ask me anything!`,
     }
     
     try {
-      const getCookie = (name) => {
-        const value = `; ${document.cookie}`;
-        const parts = value.split(`; ${name}=`);
-        if (parts.length === 2) return parts.pop().split(';').shift();
-        return null;
-      };
-      
-      const token = getCookie('token');
-      
-      if (!token) {
-        setCompileErrors(['Authentication required. Please log in again.']);
-        return;
-      }
-      
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/latex/projects/${projectId}/compile`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          files: {
-            'main.tex': latexCode,
-            'references.bib': sampleBibliography
-          }
-        })
+      const response = await api.post(`/latex/projects/${projectId}/compile`, {
+        files: {
+          'main.tex': latexCode,
+          'references.bib': sampleBibliography
+        }
+      }, {
+        responseType: 'blob'
       });
 
-      if (response.ok) {
-        const blob = await response.blob();
+      if (response.status === 200) {
         if (pdfUrl) {
           URL.revokeObjectURL(pdfUrl);
         }
-        const pdfObjectUrl = URL.createObjectURL(blob);
+        const pdfObjectUrl = URL.createObjectURL(response.data);
         setPdfUrl(pdfObjectUrl);
         setCompileErrors([]);
         console.log('✅ PDF generated successfully');
@@ -541,19 +521,28 @@ Select text in the editor and I'll help improve it, or just ask me anything!`,
           console.log('💾 Auto-save compilation completed');
         }
       } else {
-        const errorData = await response.json();
-        console.error('❌ Compilation failed:', errorData);
-        setCompileErrors(errorData.errors || ['Compilation failed']);
+        console.error('❌ Compilation failed:', response.data);
+        setCompileErrors(['Compilation failed']);
         setPdfUrl('');
       }
       
     } catch (error) {
       console.error('💥 Compilation error:', error);
-      setCompileErrors([`Network error: ${error.message}`]);
+      if (error.response?.data) {
+        try {
+          const errorText = await error.response.data.text();
+          const errorData = JSON.parse(errorText);
+          setCompileErrors(errorData.errors || ['Compilation failed']);
+        } catch {
+          setCompileErrors(['Compilation failed']);
+        }
+      } else {
+        setCompileErrors([`Network error: ${error.message}`]);
+      }
     } finally {
       setIsCompiling(false);
     }
-  }, [projectId, latexCode, pdfUrl, project, saveProject]);
+  }, [projectId, latexCode, pdfUrl, project, saveProject, api]);
 
   // Initial compilation on load
   useEffect(() => {
