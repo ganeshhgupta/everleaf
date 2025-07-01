@@ -20,7 +20,7 @@ export const AuthProvider = ({ children }) => {
   // Create axios instance WITH /api in baseURL (your backend uses /api prefix)
   const api = axios.create({
     baseURL: `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api`,
-    timeout: 15000,
+    timeout: 60000,
     headers: {
       'Content-Type': 'application/json',
     },

@@ -746,10 +746,51 @@ Select text in the editor and I'll help improve it, or just ask me anything!`,
   };
 
   // Document management handlers
-  const handleDocumentsUploaded = (newDocuments) => {
-    setDocuments(prev => [...prev, ...newDocuments]);
-    console.log(`Added ${newDocuments.length} new documents`);
+const handleDocumentsUploaded = async (newDocuments) => {
+  console.log(`${newDocuments.length} documents uploaded, refreshing list...`);
+  
+  // Instead of just adding, re-fetch all documents to get updated info
+  await loadDocuments();
+  
+  // Set up polling to check for processing updates
+  const pollForUpdates = () => {
+    let pollCount = 0;
+    const maxPolls = 40; // 40 * 3 seconds = 2 minutes max
+    
+    const checkInterval = setInterval(async () => {
+      pollCount++;
+      console.log(`📊 Polling for updates (${pollCount}/${maxPolls})`);
+      
+      try {
+        await loadDocuments();
+        
+        // Stop polling when all documents are processed OR max polls reached
+        const currentDocs = await api.get(`/documents/${projectId}`);
+        const processingDocs = currentDocs.data.documents.filter(
+          doc => doc.processingStatus === 'processing' || doc.processingStatus === 'pending'
+        );
+        
+        if (processingDocs.length === 0) {
+          clearInterval(checkInterval);
+          console.log('✅ All documents processed - stopping polls');
+          return;
+        }
+        
+        if (pollCount >= maxPolls) {
+          clearInterval(checkInterval);
+          console.log('⏰ Max polling time reached - stopping polls');
+          return;
+        }
+        
+      } catch (error) {
+        console.error('❌ Polling error:', error);
+        clearInterval(checkInterval);
+      }
+    }, 3000);
   };
+  
+  pollForUpdates();
+};
 
   const handleDeleteDocument = async (documentId) => {
     if (window.confirm('Are you sure you want to delete this document? This will also remove its embeddings.')) {

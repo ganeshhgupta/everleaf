@@ -85,6 +85,7 @@ const Dashboard = () => {
     logout();
   };
 
+  // Handle "New Project" and "Create Project" buttons - simple content
   const handleCreateProject = async () => {
     try {
       setCreating(true);
@@ -99,13 +100,14 @@ const Dashboard = () => {
         latexContent: ''
       };
 
-      console.log('🔨 Creating project:', projectData);
+      console.log('🔨 Creating simple project:', projectData);
 
       const response = await api.post('/projects', projectData);
       
       console.log('✅ Project created:', response.data);
 
       if (response.data.success) {
+        // Navigate WITHOUT template flag (will use simple content)
         navigate(`/editor/${response.data.project.id}`);
       } else {
         setError('Failed to create project. Please try again.');
@@ -113,6 +115,41 @@ const Dashboard = () => {
     } catch (error) {
       console.error('❌ Failed to create project:', error);
       setError('Failed to create project. Please try again.');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  // Handle "Use Template" button - full template content
+  const handleUseTemplate = async () => {
+    try {
+      setCreating(true);
+      
+      const baseTitle = `Research Paper ${new Date().toLocaleDateString()}`;
+      const uniqueTitle = generateUniqueTitle(baseTitle, [...projects, ...collaboratedProjects]);
+      
+      const projectData = {
+        title: uniqueTitle,
+        description: 'Research paper from template',
+        content: '',
+        latexContent: ''
+      };
+
+      console.log('📄 Creating project from template:', projectData);
+
+      const response = await api.post('/projects', projectData);
+      
+      console.log('✅ Template project created:', response.data);
+
+      if (response.data.success) {
+        // Navigate WITH template flag (will use full template content)
+        navigate(`/editor/${response.data.project.id}?template=true`);
+      } else {
+        setError('Failed to create project from template. Please try again.');
+      }
+    } catch (error) {
+      console.error('❌ Failed to create project from template:', error);
+      setError('Failed to create project from template. Please try again.');
     } finally {
       setCreating(false);
     }
@@ -384,7 +421,11 @@ const Dashboard = () => {
                 <p className="text-sm text-gray-500">Start from scratch</p>
               </button>
 
-              <button className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-md transition-shadow text-center">
+              <button 
+                onClick={handleUseTemplate}
+                disabled={creating}
+                className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-md transition-shadow text-center disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 <DocumentTextIcon className="w-8 h-8 text-blue-500 mx-auto mb-2" />
                 <h3 className="font-medium text-gray-900">Use Template</h3>
                 <p className="text-sm text-gray-500">Research paper template</p>
