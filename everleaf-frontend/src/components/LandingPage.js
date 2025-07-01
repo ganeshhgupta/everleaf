@@ -227,6 +227,7 @@ const LandingPage = () => {
             <Link 
               to="/features" 
               className="inline-flex items-center px-6 py-3 border border-primary-600 text-primary-600 rounded-lg hover:bg-primary-50 transition-colors font-medium"
+              onClick={() => window.scrollTo(0, 0)}
             >
               View All Features
               <ArrowRightIcon className="w-5 h-5 ml-2" />
@@ -238,14 +239,27 @@ const LandingPage = () => {
       {/* Pricing Section */}
       <section id="pricing" className="py-20 px-4 sm:px-6 lg:px-8 bg-gray-50">
         <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-4xl font-bold text-gray-900 mb-6">
-            Simple, Transparent Pricing
-          </h2>
-          <p className="text-xl text-gray-600 mb-12">
-            Get started with all features completely free. No hidden costs, no commitments.
-          </p>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            viewport={{ once: true }}
+          >
+            <h2 className="text-4xl font-bold text-gray-900 mb-6">
+              Simple, Transparent Pricing
+            </h2>
+            <p className="text-xl text-gray-600 mb-12">
+              Get started with all features completely free. No hidden costs, no commitments.
+            </p>
+          </motion.div>
           
-          <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100 max-w-md mx-auto">
+          <motion.div 
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.2 }}
+            viewport={{ once: true }}
+            className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100 max-w-md mx-auto"
+          >
             <div className="text-center">
               <h3 className="text-2xl font-bold text-gray-900 mb-2">Free Plan</h3>
               <div className="mb-6">
@@ -291,24 +305,42 @@ const LandingPage = () => {
                 Get Started Free
               </Link>
             </div>
-          </div>
+          </motion.div>
           
-          <p className="text-gray-500 text-sm mt-6">
+          <motion.p 
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            transition={{ duration: 0.6, delay: 0.4 }}
+            viewport={{ once: true }}
+            className="text-gray-500 text-sm mt-6"
+          >
             No credit card required • Start writing immediately
-          </p>
+          </motion.p>
         </div>
       </section>
 
       {/* About Section */}
       <section id="about" className="py-20 px-4 sm:px-6 lg:px-8">
         <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-16">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            viewport={{ once: true }}
+            className="text-center mb-16"
+          >
             <h2 className="text-4xl font-bold text-gray-900 mb-6">
               About the Creator
             </h2>
-          </div>
+          </motion.div>
           
-          <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
+          <motion.div 
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.2 }}
+            viewport={{ once: true }}
+            className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100"
+          >
             <div className="flex flex-col md:flex-row items-center md:items-start gap-8">
               <div className="flex-shrink-0">
                 <img 
@@ -331,13 +363,13 @@ const LandingPage = () => {
                 <p className="text-primary-600 font-medium mb-4">Generative AI • LLM • Computer Vision • Full-Stack</p>
                 
                 <p className="text-gray-600 mb-6 leading-relaxed">
-                  Hi, I’m Ganesh.<br></br><br></br>
+                  Hi, I'm Ganesh.<br /><br />
                   After three years working as a Software Development Engineer and recently completing my Master of Science in Computer Science with a specialization in Artificial Intelligence and Big Data from the University of Texas at Arlington, I faced a real challenge during my academic journey—finishing my thesis in just one semester.
-                  The time crunch was intense, and I found myself overwhelmed by the tedious process of sifting through hundreds of research papers and wrestling with complex LaTeX formatting.<br></br>
-<br></br>
-                  I kept wishing there was a tool that could save me time and frustration, letting me focus on what truly matters—my ideas and research. That’s why I built Everleaf. This platform is a labor of love, combining modern AI with intuitive design to help researchers like me navigate academic writing more smoothly. Right now, Everleaf is hosted on free-tier deployment platforms, so it can be a bit slow at times, but I’m planning to host it on more robust infrastructure and scale it up in the future.
-<br></br><br></br>
-                I’m also currently exploring new job opportunities. If you like what you see, please check out my portfolio and reach out—I’d love to connect!
+                  The time crunch was intense, and I found myself overwhelmed by the tedious process of sifting through hundreds of research papers and wrestling with complex LaTeX formatting.<br />
+                  <br />
+                  I kept wishing there was a tool that could save me time and frustration, letting me focus on what truly matters—my ideas and research. That's why I built Everleaf. This platform is a labor of love, combining modern AI with intuitive design to help researchers like me navigate academic writing more smoothly. Right now, Everleaf is hosted on free-tier deployment platforms, so it can be a bit slow at times, but I'm planning to host it on more robust infrastructure and scale it up in the future.
+                  <br /><br />
+                  I'm also currently exploring new job opportunities. If you like what you see, please check out my portfolio and reach out—I'd love to connect!
                 </p>
                 
                 <div className="flex flex-wrap justify-center md:justify-start gap-4">
@@ -387,7 +419,7 @@ const LandingPage = () => {
                 </div>
               </div>
             </div>
-          </div>
+          </motion.div>
         </div>
       </section>
 
@@ -414,7 +446,7 @@ const LandingPage = () => {
       {/* Footer */}
       <footer className="bg-gray-900 text-white py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
-          <div className="grid md:grid-cols-4 gap-8">
+          <div className="grid md:grid-cols-3 gap-8">
             <div>
               <div className="flex items-center space-x-2 mb-4">
                 <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-600 rounded-lg flex items-center justify-center">
@@ -429,25 +461,15 @@ const LandingPage = () => {
             <div>
               <h4 className="font-semibold mb-4">Product</h4>
               <ul className="space-y-2 text-gray-400">
-                <li><Link to="/features" className="hover:text-white transition-colors">Features</Link></li>
+                <li><Link to="/features" className="hover:text-white transition-colors" onClick={() => window.scrollTo(0, 0)}>Features</Link></li>
                 <li><a href="#pricing" className="hover:text-white transition-colors">Pricing</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Templates</a></li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold mb-4">Company</h4>
               <ul className="space-y-2 text-gray-400">
                 <li><a href="#about" className="hover:text-white transition-colors">About</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Blog</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Careers</a></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-semibold mb-4">Support</h4>
-              <ul className="space-y-2 text-gray-400">
-                <li><a href="#" className="hover:text-white transition-colors">Help Center</a></li>
-                <li><a href="mailto:iamgs10rk@gmail.com" className="hover:text-white transition-colors">Contact</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Status</a></li>
+                <li><a href="#about" className="hover:text-white transition-colors">Contact</a></li>
               </ul>
             </div>
           </div>

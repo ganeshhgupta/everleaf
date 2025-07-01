@@ -9,6 +9,7 @@ import AdminLogin from './components/auth/AdminLogin';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import LaTeXEditor from './components/editor/LaTeXEditor';
+import FeaturesPage from './components/FeaturesPage';
 
 // Loading component
 const LoadingSpinner = () => (
@@ -33,6 +34,8 @@ function AppRoutes() {
       <Route path="/admin/login" element={user?.role === 'admin' ? <Navigate to="/dashboard" /> : <AdminLogin />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/editor/:projectId" element={<LaTeXEditor />} />
+      <Route path="/features" element={<FeaturesPage />} />
+
 
       {/* Protected Routes */}
       <Route 
