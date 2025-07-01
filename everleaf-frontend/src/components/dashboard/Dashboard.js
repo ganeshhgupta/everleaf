@@ -572,44 +572,40 @@ Hello Hello Hello :)
                         {/* Project Action Icons */}
                         <div className="flex items-center space-x-2">
                           <button 
-                            className="relative p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors group"
+                            className="relative p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors tooltip-container"
                             onClick={(e) => handleDownloadTeX(project, e)}
                           >
                             <DocumentTextIcon className="w-5 h-5 font-bold stroke-2" />
-                            <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-800 text-white text-sm rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-20 shadow-lg">
+                            <div className="tooltip">
                               Download as .tex
-                              <span className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></span>
-                            </span>
+                            </div>
                           </button>
                           <button 
-                            className="relative p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors group"
+                            className="relative p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors tooltip-container"
                             onClick={(e) => handleDownloadPDF(project, e)}
                           >
                             <DocumentArrowDownIcon className="w-5 h-5 font-bold stroke-2" />
-                            <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-800 text-white text-sm rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-20 shadow-lg">
+                            <div className="tooltip">
                               Download as PDF
-                              <span className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></span>
-                            </span>
+                            </div>
                           </button>
                           <button 
-                            className="relative p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors group"
+                            className="relative p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors tooltip-container"
                             onClick={(e) => handleCloneProject(project, e)}
                           >
                             <DocumentDuplicateIcon className="w-5 h-5 font-bold stroke-2" />
-                            <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-800 text-white text-sm rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-20 shadow-lg">
+                            <div className="tooltip">
                               Make a copy
-                              <span className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></span>
-                            </span>
+                            </div>
                           </button>
                           <button 
-                            className="relative p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors group"
+                            className="relative p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors tooltip-container"
                             onClick={(e) => handleDeleteProject(project, e)}
                           >
                             <TrashIcon className="w-5 h-5 font-bold stroke-2" />
-                            <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-800 text-white text-sm rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-20 shadow-lg">
+                            <div className="tooltip">
                               Delete
-                              <span className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></span>
-                            </span>
+                            </div>
                           </button>
                         </div>
                       </div>
@@ -673,6 +669,51 @@ Hello Hello Hello :)
           </div>
         </div>
       )}
+
+      {/* Add CSS for tooltips */}
+      <style jsx>{`
+        .tooltip-container {
+          position: relative;
+        }
+        
+        .tooltip {
+          position: absolute;
+          bottom: 100%;
+          left: 50%;
+          transform: translateX(-50%);
+          margin-bottom: 8px;
+          padding: 8px 12px;
+          background-color: rgb(31, 41, 55);
+          color: white;
+          font-size: 0.875rem;
+          border-radius: 6px;
+          white-space: nowrap;
+          opacity: 0;
+          visibility: hidden;
+          transition: opacity 200ms, visibility 200ms;
+          z-index: 20;
+          box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+          pointer-events: none;
+        }
+        
+        .tooltip::after {
+          content: '';
+          position: absolute;
+          top: 100%;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 0;
+          height: 0;
+          border-left: 4px solid transparent;
+          border-right: 4px solid transparent;
+          border-top: 4px solid rgb(31, 41, 55);
+        }
+        
+        .tooltip-container:hover .tooltip {
+          opacity: 1;
+          visibility: visible;
+        }
+      `}</style>
     </div>
   );
 };

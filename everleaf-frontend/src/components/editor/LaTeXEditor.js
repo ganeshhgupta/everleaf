@@ -1,4 +1,4 @@
-// LaTeXEditor.js - Now handles Flask communication directly
+// LaTeXEditor.js - ChatPanel expands to the left
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -55,7 +55,7 @@ const LaTeXEditor = () => {
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [ragMode, setRagMode] = useState(true);
 
-  // Resizable layout state
+  // Resizable layout state - UPDATED for left-expanding chat
   const [editorWidth, setEditorWidth] = useState(50);
   const [chatWidth, setChatWidth] = useState(25);
   const [isResizing, setIsResizing] = useState(false);
@@ -116,19 +116,21 @@ const LaTeXEditor = () => {
     return null;
   };
 
-  // Calculate layout widths based on chat state
+  // FIXED: Calculate layout widths - Preview stays exactly the same size
   const getLayoutWidths = useCallback(() => {
+    const basePreviewWidth = 100 - editorWidth; // Preview size when chat is collapsed
+    
     if (isChatCollapsed) {
       return {
         editor: editorWidth,
         chat: 0,
-        preview: 100 - editorWidth
+        preview: basePreviewWidth
       };
     } else {
       return {
-        editor: editorWidth,
+        editor: Math.max(20, editorWidth - chatWidth), // Editor gets smaller by chat width
         chat: chatWidth,
-        preview: 100 - editorWidth - chatWidth
+        preview: basePreviewWidth // Preview stays exactly the same
       };
     }
   }, [editorWidth, chatWidth, isChatCollapsed]);
@@ -309,7 +311,7 @@ Select text in the editor and I'll help improve it, or just ask me anything!`,
     sendChatMessage(actions[action], true, action);
   };
 
-  // Handle mouse down on resize handles
+  // UPDATED: Handle mouse down on resize handles - Chat pushes Editor left
   const handleMouseDown = useCallback((e, type) => {
     e.preventDefault();
     e.stopPropagation();
@@ -335,16 +337,20 @@ Select text in the editor and I'll help improve it, or just ask me anything!`,
       const deltaPercent = (deltaX / containerWidth) * 100;
 
       if (type === 'editor-chat') {
+        // Moving right: editor gets smaller, chat gets bigger
         const newEditorWidth = Math.max(20, Math.min(70, startEditorWidth + deltaPercent));
         const widthDiff = newEditorWidth - startEditorWidth;
+        // Chat takes the space from editor reduction
         const newChatWidth = Math.max(15, Math.min(50, startChatWidth - widthDiff));
         
         setEditorWidth(newEditorWidth);
         setChatWidth(newChatWidth);
       } else if (type === 'chat-preview') {
+        // Moving right: chat gets bigger, preview gets smaller (but editor size stays same)
         const newChatWidth = Math.max(15, Math.min(50, startChatWidth + deltaPercent));
         setChatWidth(newChatWidth);
       } else if (type === 'editor-preview') {
+        // When chat is collapsed, normal editor-preview resize
         const newEditorWidth = Math.max(20, Math.min(80, startEditorWidth + deltaPercent));
         setEditorWidth(newEditorWidth);
       }
@@ -909,7 +915,6 @@ const handleDocumentsUploaded = async (newDocuments) => {
     compileErrors,
     editorWidth: currentEditorWidth,
     onTextSelection: handleTextSelection,
-    // REMOVED: onApplyText: applyTextRef, // Not needed anymore
     selectedText,
     selectionRange,
     isResizing,
@@ -972,11 +977,12 @@ const handleDocumentsUploaded = async (newDocuments) => {
           </div>
         </div>
         
+        {/* CORRECTED: Layout order - Editor | Chat | Preview */}
         <div className="flex-1 flex relative">
           {/* Editor Panel */}
           <EditorPanel {...editorProps} />
           
-          {/* Draggable Resize Handle */}
+          {/* Draggable Resize Handle - Editor to Chat */}
           <div
             className={`w-1 bg-gray-200 hover:bg-blue-300 cursor-col-resize flex items-center justify-center group transition-colors select-none ${
               isResizing && (resizeType === 'editor-chat' || resizeType === 'editor-preview') ? 'bg-blue-400' : ''
@@ -991,7 +997,7 @@ const handleDocumentsUploaded = async (newDocuments) => {
           {/* Chat Panel */}
           <ChatPanel {...chatProps} />
           
-          {/* Draggable Resize Handle 2 */}
+          {/* Draggable Resize Handle - Chat to Preview */}
           {!isChatCollapsed && (
             <div
               className={`w-1 bg-gray-200 hover:bg-blue-300 cursor-col-resize flex items-center justify-center group transition-colors select-none ${
