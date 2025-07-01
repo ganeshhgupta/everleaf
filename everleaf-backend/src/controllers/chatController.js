@@ -26,7 +26,7 @@ try {
 }
 
 // Flask server configuration
-const FLASK_SERVER_URL = process.env.FLASK_SERVER_URL || 'http://localhost:5001';
+const FLASK_SERVER_URL = process.env.FLASK_SERVER_URL || 'https://llm-server-production.up.railway.app';
 
 class ChatController {
     // Test endpoint to check database connection

@@ -65,7 +65,7 @@ const LaTeXEditor = () => {
   const dragStartRef = useRef(null);
 
   // Groq server configuration
-  const GROQ_SERVER_URL = 'http://localhost:5001';
+  const GROQ_SERVER_URL = process.env.REACT_APP_FLASK_SERVER_URL || 'https://llm-server-production.up.railway.app';
 
   // ENHANCED: Function to extract LaTeX code or convert plain text to LaTeX
   const extractOrConvertLatexCode = (text) => {
