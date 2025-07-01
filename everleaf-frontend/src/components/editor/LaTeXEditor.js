@@ -422,7 +422,11 @@ Select text in the editor and I'll help improve it, or just ask me anything!`,
       
       setProject(projectData);
       
-      const content = projectData.latex_content || projectData.content || sampleLatex;
+    // Use content from database, fallback to simple template
+    const content = projectData.latex_content || projectData.content || `\\documentclass{article}
+\\begin{document}
+Hello Hello Hello :)
+\\end{document}`;
       setLatexCode(content);
       
       console.log('✅ Project loaded successfully:', projectData.title);

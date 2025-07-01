@@ -95,31 +95,61 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// General rate limiting
-const generalLimiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100, // limit each IP to 100 requests per windowMs
-  message: {
-    success: false,
-    message: 'Too many requests from this IP, please try again later.'
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
+// Environment-aware rate limiting configuration
+const createRateLimiter = (options = {}) => {
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  
+  const defaultConfig = {
+    // Development: Very permissive, Production: Restrictive
+    windowMs: isDevelopment ? 1 * 60 * 1000 : 15 * 60 * 1000, // 1 min dev, 15 min prod
+    max: isDevelopment ? 1000 : 100, // 1000 requests/min dev, 100 requests/15min prod
+    message: {
+      success: false,
+      message: 'Too many requests from this IP, please try again later.'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    // Skip rate limiting entirely in development if needed
+    skip: isDevelopment ? () => false : () => false, // Set to true to completely disable in dev
+    ...options // Allow override of any config
+  };
+  
+  return rateLimit(defaultConfig);
+};
+
+// General rate limiting - apply to all API routes
+const generalLimiter = createRateLimiter({
+  // Override defaults if needed
+  windowMs: process.env.RATE_LIMIT_WINDOW_MS ? 
+    parseInt(process.env.RATE_LIMIT_WINDOW_MS) : 
+    (process.env.NODE_ENV === 'development' ? 1 * 60 * 1000 : 15 * 60 * 1000),
+  max: process.env.RATE_LIMIT_MAX_REQUESTS ? 
+    parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) : 
+    (process.env.NODE_ENV === 'development' ? 1000 : 100)
 });
 
-app.use(generalLimiter);
+// Auth-specific rate limiting (more restrictive for security)
+const authLimiter = createRateLimiter({
+  windowMs: process.env.NODE_ENV === 'development' ? 5 * 60 * 1000 : 15 * 60 * 1000, // 5 min dev, 15 min prod
+  max: process.env.NODE_ENV === 'development' ? 50 : 10, // 50 dev, 10 prod
+  message: {
+    success: false,
+    message: 'Too many authentication attempts, please try again later.'
+  }
+});
 
-// Stricter rate limiting for chat endpoints
-const chatLimiter = rateLimit({
+// Chat-specific rate limiting
+const chatLimiter = createRateLimiter({
   windowMs: 60 * 1000, // 1 minute
-  max: 20, // limit each IP to 20 chat requests per minute
+  max: process.env.NODE_ENV === 'development' ? 100 : 20, // 100 dev, 20 prod
   message: {
     success: false,
     message: 'Too many chat requests, please slow down.'
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
+  }
 });
+
+// Apply general rate limiting to all API routes
+app.use('/api/', generalLimiter);
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
@@ -174,6 +204,12 @@ app.get('/health', async (req, res) => {
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
     version: '1.0.0',
+    rateLimiting: {
+      development: process.env.NODE_ENV === 'development',
+      generalLimit: process.env.NODE_ENV === 'development' ? '1000/min' : '100/15min',
+      authLimit: process.env.NODE_ENV === 'development' ? '50/5min' : '10/15min',
+      chatLimit: process.env.NODE_ENV === 'development' ? '100/min' : '20/min'
+    },
     services: {
       database: 'connected', // You might want to add actual DB health check
       flask_llm: flaskStatus
@@ -181,8 +217,8 @@ app.get('/health', async (req, res) => {
   });
 });
 
-// API routes
-app.use('/api/auth', authRoutes);
+// API routes with specific rate limiting
+app.use('/api/auth', authLimiter, authRoutes); // Apply auth-specific rate limiting
 app.use('/api/users', userRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/files', fileRoutes);
@@ -191,7 +227,7 @@ app.use('/api/latex', latexRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/rag', ragRoutes);
 app.use('/api/chat-public', chatPublicRoutes); // ADD THIS LINE - Mount public routes first
-app.use('/api/chat', chatLimiter, chatRoutes); // Keep existing chat routes
+app.use('/api/chat', chatLimiter, chatRoutes); // Apply chat-specific rate limiting
 
 // WebSocket status endpoint
 app.get('/api/ws/status', (req, res) => {
@@ -361,6 +397,12 @@ const startServer = async () => {
 🔗 API base URL: http://localhost:${PORT}/api
 🔌 WebSocket support: ENABLED
 🤖 Chat integration: ENABLED
+
+⚡ Rate Limiting Configuration:
+   • Environment: ${process.env.NODE_ENV === 'development' ? 'DEVELOPMENT (Permissive)' : 'PRODUCTION (Restrictive)'}
+   • General API: ${process.env.NODE_ENV === 'development' ? '1000 requests/minute' : '100 requests/15 minutes'}
+   • Authentication: ${process.env.NODE_ENV === 'development' ? '50 requests/5 minutes' : '10 requests/15 minutes'}
+   • Chat endpoints: ${process.env.NODE_ENV === 'development' ? '100 requests/minute' : '20 requests/minute'}
       `);
       
       if (process.env.NODE_ENV === 'development') {

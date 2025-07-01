@@ -33,18 +33,13 @@ const Toolbar = ({
   onDeleteProject
 }) => {
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
-  const [showActionsMenu, setShowActionsMenu] = useState(false);
   const downloadMenuRef = useRef(null);
-  const actionsMenuRef = useRef(null);
 
-  // Close menus when clicking outside
+  // Close menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (downloadMenuRef.current && !downloadMenuRef.current.contains(event.target)) {
         setShowDownloadMenu(false);
-      }
-      if (actionsMenuRef.current && !actionsMenuRef.current.contains(event.target)) {
-        setShowActionsMenu(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -62,7 +57,6 @@ const Toolbar = ({
   const handleDownloadTeX = () => {
     downloadTeX(latexCode, activeFile);
     setShowDownloadMenu(false);
-    setShowActionsMenu(false);
   };
 
   const handleDownloadPDF = () => {
@@ -71,16 +65,15 @@ const Toolbar = ({
       alert('Please compile the document first to generate a PDF');
     }
     setShowDownloadMenu(false);
-    setShowActionsMenu(false);
   };
 
   const handleCloneProject = () => {
     onCloneProject();
-    setShowActionsMenu(false);
+    setShowDownloadMenu(false);
   };
 
   const handleDeleteProject = () => {
-    setShowActionsMenu(false);
+    setShowDownloadMenu(false);
     onDeleteProject();
   };
 
@@ -146,10 +139,10 @@ const Toolbar = ({
             {isCompiling ? 'Compiling...' : 'Compile'}
           </button>
 
-          {/* Download Button with Hover Menu */}
+          {/* Consolidated Download Button with All Options */}
           <div className="relative" ref={downloadMenuRef}>
             <button
-              onMouseEnter={() => setShowDownloadMenu(true)}
+              onClick={() => setShowDownloadMenu(!showDownloadMenu)}
               className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
             >
               <DocumentArrowDownIcon className="w-4 h-4 mr-2" />
@@ -157,41 +150,11 @@ const Toolbar = ({
             </button>
             
             {showDownloadMenu && (
-              <div 
-                className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50"
-                onMouseLeave={() => setShowDownloadMenu(false)}
-              >
-                <button
-                  onClick={handleDownloadTeX}
-                  className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-2"
-                >
-                  <DocumentTextIcon className="w-4 h-4 text-gray-500" />
-                  <span>Download as .tex</span>
-                </button>
-                <button
-                  onClick={handleDownloadPDF}
-                  className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-2"
-                >
-                  <DocumentArrowDownIcon className="w-4 h-4 text-gray-500" />
-                  <span>Download as PDF</span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Project Actions Menu */}
-          <div className="relative" ref={actionsMenuRef}>
-            <button
-              onClick={() => setShowActionsMenu(!showActionsMenu)}
-              className="inline-flex items-center p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
-            >
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-              </svg>
-            </button>
-            
-            {showActionsMenu && (
               <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+                {/* Download Options */}
+                <div className="px-3 py-1">
+                  <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Download</div>
+                </div>
                 <button
                   onClick={handleDownloadTeX}
                   className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-3"
@@ -206,22 +169,27 @@ const Toolbar = ({
                   <DocumentArrowDownIcon className="w-4 h-4 text-gray-500" />
                   <span>Download as PDF</span>
                 </button>
-                <div className="border-t border-gray-100 my-1"></div>
-                <button
-                  onClick={handleCloneProject}
-                  className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-3"
-                >
-                  <DocumentDuplicateIcon className="w-4 h-4 text-gray-500" />
-                  <span>Make a copy</span>
-                </button>
-                <div className="border-t border-gray-100 my-1"></div>
-                <button
-                  onClick={handleDeleteProject}
-                  className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 flex items-center space-x-3"
-                >
-                  <TrashIcon className="w-4 h-4" />
-                  <span>Delete</span>
-                </button>
+                
+                {/* Project Actions */}
+                <div className="border-t border-gray-100 mt-2 pt-2">
+                  <div className="px-3 py-1">
+                    <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Project Actions</div>
+                  </div>
+                  <button
+                    onClick={handleCloneProject}
+                    className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-3"
+                  >
+                    <DocumentDuplicateIcon className="w-4 h-4 text-gray-500" />
+                    <span>Make a copy</span>
+                  </button>
+                  <button
+                    onClick={handleDeleteProject}
+                    className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 flex items-center space-x-3"
+                  >
+                    <TrashIcon className="w-4 h-4" />
+                    <span>Delete project</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>

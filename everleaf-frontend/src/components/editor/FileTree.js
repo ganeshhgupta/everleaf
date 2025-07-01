@@ -4,7 +4,8 @@ import {
   DocumentTextIcon,
   PlusIcon,
   ChevronRightIcon,
-  ChevronDownIcon
+  ChevronDownIcon,
+  ChevronLeftIcon
 } from '@heroicons/react/24/outline';
 
 const FileTree = ({
@@ -13,7 +14,8 @@ const FileTree = ({
   expandedFolders,
   sidebarOpen,
   onFileSelect,
-  onToggleFolder
+  onToggleFolder,
+  onToggleSidebar
 }) => {
   const renderFileTree = (files, level = 0) => {
     return files.map(file => (
@@ -55,16 +57,41 @@ const FileTree = ({
   };
 
   if (!sidebarOpen) {
-    return null;
+    return (
+      // Collapsed state - show a thin vertical bar with expand button
+      <div className="w-8 bg-white border-r border-gray-200 flex flex-col">
+        <div className="h-9 flex items-center justify-center border-b border-gray-200">
+          <button 
+            onClick={onToggleSidebar}
+            className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+            title="Expand Files Panel"
+          >
+            <ChevronRightIcon className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
-      {/* Header with same height as editor header (px-4 py-2) */}
-      <div className="bg-white border-b border-gray-200 px-4 py-1.5 h-9.5">
+      {/* Header with collapse button */}
+      <div className="bg-white border-b border-gray-200 px-3 py-2 h-9">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium text-gray-900">Files</h3>
-          <button className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors">
+          <div className="flex items-center space-x-2">
+            <button 
+              onClick={onToggleSidebar}
+              className="p-0.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+              title="Collapse Files Panel"
+            >
+              <ChevronLeftIcon className="w-4 h-4" />
+            </button>
+            <h3 className="text-sm font-medium text-gray-900">Files</h3>
+          </div>
+          <button 
+            className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+            title="Add File"
+          >
             <PlusIcon className="w-4 h-4" />
           </button>
         </div>

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { useAuth } from '../../context/AuthContext'; // Add this import
+import { useAuth } from '../../context/AuthContext';
 import { 
   ArrowUpTrayIcon as Upload, 
   LinkIcon as Link, 
@@ -11,16 +11,171 @@ import {
 } from '@heroicons/react/24/outline';
 
 const DocumentUpload = ({ projectId, onDocumentsUploaded, documents = [], onDeleteDocument, onReprocessDocument }) => {
-  const { api } = useAuth(); // Add this line
+  const { api } = useAuth();
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [showUrlDialog, setShowUrlDialog] = useState(false);
   const [urls, setUrls] = useState(['']);
   const [collapsed, setCollapsed] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [documentToDelete, setDocumentToDelete] = useState(null);
   
   const fileInputRef = useRef();
 
-  // Updated uploadFiles function to use api instance
+  // CORS Proxy configuration with fallbacks
+  const CORS_PROXIES = [
+    {
+      name: 'CORS.lol',
+      url: 'https://api.cors.lol/?url=',
+      maxSize: 10 * 1024 * 1024, // 10MB
+      rateLimit: '100/hour'
+    },
+    {
+      name: 'CodeTabs',
+      url: 'https://api.codetabs.com/v1/proxy?quest=',
+      maxSize: 5 * 1024 * 1024, // 5MB
+      rateLimit: '5/second'
+    },
+    {
+      name: 'HTMLDriven',
+      url: 'https://cors-proxy.htmldriven.com/?url=',
+      maxSize: 50 * 1024 * 1024, // 50MB
+      rateLimit: 'Unknown'
+    }
+  ];
+
+  // Utility function to validate PDF URLs
+  const validatePdfUrl = (url) => {
+    try {
+      const urlObj = new URL(url);
+      
+      // Check if it's a valid HTTP/HTTPS URL
+      if (!['http:', 'https:'].includes(urlObj.protocol)) {
+        return { valid: false, error: 'URL must use HTTP or HTTPS protocol' };
+      }
+      
+      // Check for common PDF indicators
+      const isPdfUrl = url.toLowerCase().includes('.pdf') || 
+                      url.includes('application/pdf') ||
+                      url.includes('arxiv.org/pdf/') ||
+                      url.includes('export=download');
+      
+      if (!isPdfUrl) {
+        console.warn(`⚠️ URL may not be a PDF: ${url}`);
+      }
+      
+      return { valid: true, isPdfUrl };
+    } catch (error) {
+      return { valid: false, error: 'Invalid URL format' };
+    }
+  };
+
+  // Function to download PDF through CORS proxy with fallback
+  const downloadPdfThroughProxy = async (url, proxyIndex = 0) => {
+    if (proxyIndex >= CORS_PROXIES.length) {
+      throw new Error('All CORS proxies failed');
+    }
+    
+    const proxy = CORS_PROXIES[proxyIndex];
+    const proxiedUrl = proxy.url + encodeURIComponent(url);
+    
+    console.log(`🔄 Attempting download via ${proxy.name}: ${proxiedUrl}`);
+    
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      
+      const response = await fetch(proxiedUrl, {
+        method: 'GET',
+        signal: controller.signal,
+        headers: {
+          'Accept': 'application/pdf,*/*',
+        }
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      // Check content type
+      const contentType = response.headers.get('content-type');
+      console.log(`📄 Content-Type: ${contentType}`);
+      
+      // Get content length for size validation
+      const contentLength = response.headers.get('content-length');
+      if (contentLength && parseInt(contentLength) > proxy.maxSize) {
+        throw new Error(`File too large: ${contentLength} bytes (max: ${proxy.maxSize})`);
+      }
+      
+      const blob = await response.blob();
+      
+      // Validate blob size
+      if (blob.size === 0) {
+        throw new Error('Downloaded file is empty');
+      }
+      
+      if (blob.size > proxy.maxSize) {
+        throw new Error(`File too large: ${blob.size} bytes (max: ${proxy.maxSize})`);
+      }
+      
+      console.log(`✅ Successfully downloaded via ${proxy.name}: ${blob.size} bytes`);
+      return { blob, proxy: proxy.name };
+      
+    } catch (error) {
+      console.warn(`❌ ${proxy.name} failed: ${error.message}`);
+      
+      // If this proxy failed, try the next one
+      if (error.name === 'AbortError') {
+        console.warn(`⏰ ${proxy.name} timed out, trying next proxy...`);
+      } else if (error.message.includes('CORS') || error.message.includes('Network')) {
+        console.warn(`🌐 ${proxy.name} network/CORS error, trying next proxy...`);
+      }
+      
+      // Try next proxy
+      return await downloadPdfThroughProxy(url, proxyIndex + 1);
+    }
+  };
+
+  // Convert blob to File object
+  const blobToFile = (blob, filename, lastModified = Date.now()) => {
+    const file = new File([blob], filename, {
+      type: blob.type || 'application/pdf',
+      lastModified: lastModified
+    });
+    return file;
+  };
+
+  // Extract filename from URL
+  const getFilenameFromUrl = (url) => {
+    try {
+      const urlObj = new URL(url);
+      let filename = urlObj.pathname.split('/').pop();
+      
+      // Handle special cases
+      if (url.includes('arxiv.org/pdf/')) {
+        const match = url.match(/arxiv\.org\/pdf\/([^/?]+)/);
+        if (match) {
+          filename = `arxiv_${match[1]}.pdf`;
+        }
+      }
+      
+      // Ensure .pdf extension
+      if (!filename.toLowerCase().endsWith('.pdf')) {
+        filename += '.pdf';
+      }
+      
+      // Sanitize filename
+      filename = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+      
+      return filename || 'document.pdf';
+    } catch {
+      return 'document.pdf';
+    }
+  };
+
+  // Updated uploadFiles function (unchanged)
   const uploadFiles = useCallback(async (files) => {
     console.log('📤 Starting file upload process...', files.length, 'files');
     setUploading(true);
@@ -48,18 +203,16 @@ const DocumentUpload = ({ projectId, onDocumentsUploaded, documents = [], onDele
         onDocumentsUploaded && onDocumentsUploaded(response.data.documents);
       } else {
         console.error('❌ Upload failed:', response.data.message);
-        alert(response.data.message || 'Upload failed');
       }
     } catch (error) {
       console.error('❌ Upload error:', error);
-      alert('Upload failed: ' + error.message);
     } finally {
       console.log('🏁 Upload process completed');
       setUploading(false);
     }
-  }, [projectId, onDocumentsUploaded, api]); // Add api to dependencies
+  }, [projectId, onDocumentsUploaded, api]);
 
-  // Now handleFiles can reference uploadFiles
+  // Updated handleFiles function (unchanged)
   const handleFiles = useCallback(async (fileList) => {
     console.log('📁 Processing file list...', fileList.length, 'files');
     const files = Array.from(fileList);
@@ -70,12 +223,10 @@ const DocumentUpload = ({ projectId, onDocumentsUploaded, documents = [], onDele
       console.log(`📄 Checking file: ${file.name}, type: ${file.type}, size: ${file.size}`);
       if (file.type !== 'application/pdf') {
         console.warn(`❌ ${file.name} is not a PDF file (type: ${file.type})`);
-        alert(`${file.name} is not a PDF file`);
         return false;
       }
       if (file.size > 50 * 1024 * 1024) { // 50MB limit
         console.warn(`❌ ${file.name} is too large: ${file.size} bytes`);
-        alert(`${file.name} is too large (max 50MB)`);
         return false;
       }
       console.log(`✅ ${file.name} passed validation`);
@@ -90,7 +241,6 @@ const DocumentUpload = ({ projectId, onDocumentsUploaded, documents = [], onDele
     }
     if (validFiles.length > 10) {
       console.warn('❌ Too many files selected');
-      alert('Maximum 10 files allowed per upload');
       return;
     }
 
@@ -98,16 +248,15 @@ const DocumentUpload = ({ projectId, onDocumentsUploaded, documents = [], onDele
     await uploadFiles(validFiles);
   }, [uploadFiles]);
 
-  // Handle file input change
+  // Handle file input change (unchanged)
   const handleFileInputChange = useCallback((e) => {
     if (e.target.files && e.target.files.length > 0) {
       handleFiles(e.target.files);
     }
-    // Reset the input value so the same file can be selected again
     e.target.value = '';
   }, [handleFiles]);
 
-  // Handle file drops
+  // Handle file drops (unchanged)
   const handleDrop = useCallback((e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -118,7 +267,7 @@ const DocumentUpload = ({ projectId, onDocumentsUploaded, documents = [], onDele
     }
   }, [handleFiles]);
 
-  // Handle drag events
+  // Handle drag events (unchanged)
   const handleDrag = useCallback((e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -129,7 +278,7 @@ const DocumentUpload = ({ projectId, onDocumentsUploaded, documents = [], onDele
     }
   }, []);
 
-  // Updated uploadFromUrls function to use api instance
+  // NEW: Enhanced uploadFromUrls function with CORS proxy support
   const uploadFromUrls = async () => {
     const validUrls = urls.filter(url => url.trim());
     
@@ -137,44 +286,119 @@ const DocumentUpload = ({ projectId, onDocumentsUploaded, documents = [], onDele
     
     if (validUrls.length === 0) {
       console.warn('❌ No valid URLs provided');
-      alert('Please enter at least one URL');
+      return;
+    }
+
+    // Validate URLs first
+    const urlValidations = validUrls.map(url => ({
+      url,
+      ...validatePdfUrl(url)
+    }));
+
+    const invalidUrls = urlValidations.filter(v => !v.valid);
+    if (invalidUrls.length > 0) {
+      console.error('❌ Invalid URLs:', invalidUrls);
       return;
     }
 
     console.log('📋 URLs to upload:', validUrls);
     setUploading(true);
     
-    try {
-      console.log('🌐 Sending URL upload request to server...');
-      const response = await api.post(`/documents/${projectId}/upload-urls`, {
-        urls: validUrls
-      });
+    const results = {
+      successful: [],
+      failed: []
+    };
 
-      console.log('📨 URL upload response status:', response.status);
-      console.log('📨 URL upload response data:', response.data);
-      
-      if (response.data.success) {
-        console.log('✅ URL upload successful');
-        onDocumentsUploaded && onDocumentsUploaded(response.data.documents);
-        if (response.data.failed && response.data.failed.length > 0) {
-          console.warn(`⚠️ Some URLs failed: ${response.data.failed.length}`);
-          alert(`${response.data.documents.length} documents uploaded successfully. ${response.data.failed.length} URLs failed.`);
+    try {
+      // Process URLs sequentially to avoid overwhelming proxies
+      for (let i = 0; i < validUrls.length; i++) {
+        const url = validUrls[i];
+        console.log(`🔄 Processing URL ${i + 1}/${validUrls.length}: ${url}`);
+        
+        try {
+          // Download through CORS proxy
+          const { blob, proxy } = await downloadPdfThroughProxy(url);
+          
+          // Convert to File object
+          const filename = getFilenameFromUrl(url);
+          const file = blobToFile(blob, filename);
+          
+          console.log(`✅ Downloaded ${filename} via ${proxy}: ${file.size} bytes`);
+          results.successful.push({
+            url,
+            file,
+            proxy,
+            filename
+          });
+          
+          // Add small delay between requests to respect rate limits
+          if (i < validUrls.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+          
+        } catch (error) {
+          console.error(`❌ Failed to download ${url}:`, error.message);
+          results.failed.push({
+            url,
+            error: error.message
+          });
         }
+      }
+
+      console.log(`📊 Download results: ${results.successful.length} successful, ${results.failed.length} failed`);
+
+      // Upload successful downloads
+      if (results.successful.length > 0) {
+        const files = results.successful.map(r => r.file);
+        console.log('🚀 Uploading downloaded files to server...');
+        
+        await uploadFiles(files);
+        
+        // Log success info (no alert)
+        const proxyInfo = results.successful.map(r => `${r.filename} (via ${r.proxy})`).join('\n');
+        console.log('✅ Successfully uploaded via proxies:\n' + proxyInfo);
+      }
+
+      // Log failed downloads (no alert)
+      if (results.failed.length > 0) {
+        const failedInfo = results.failed.map(r => `${r.url}: ${r.error}`).join('\n');
+        console.warn('⚠️ Some downloads failed:\n' + failedInfo);
+      }
+
+      // Close dialog on any successful upload
+      if (results.successful.length > 0) {
         setShowUrlDialog(false);
         setUrls(['']);
-      } else {
-        console.error('❌ URL upload failed:', response.data.message);
-        alert(response.data.message || 'Upload failed');
       }
+
     } catch (error) {
-      console.error('❌ URL upload error:', error);
-      alert('Upload failed: ' + error.message);
+      console.error('❌ URL upload process error:', error);
     } finally {
       console.log('🏁 URL upload process completed');
       setUploading(false);
     }
   };
 
+  // Handle document deletion
+  const handleDeleteDocument = (doc) => {
+    setDocumentToDelete(doc);
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDeleteDocument = () => {
+    if (documentToDelete && onDeleteDocument) {
+      onDeleteDocument(documentToDelete.id);
+    }
+    setShowDeleteDialog(false);
+    setDocumentToDelete(null);
+  };
+
+  const cancelDeleteDocument = () => {
+    setShowDeleteDialog(false);
+    setDocumentToDelete(null);
+  };
+
+  // Rest of the component functions remain unchanged...
   const addUrlField = () => {
     if (urls.length < 10) {
       setUrls([...urls, '']);
@@ -287,46 +511,35 @@ const DocumentUpload = ({ projectId, onDocumentsUploaded, documents = [], onDele
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
-              className="flex flex-col items-center justify-center px-3 py-3 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className={`flex flex-col items-center justify-center aspect-square border-2 border-dashed rounded-md text-sm font-medium transition-all ${
+                dragActive 
+                  ? 'border-blue-400 bg-blue-50 text-blue-700' 
+                  : 'border-gray-300 text-gray-700 bg-white hover:border-gray-400 hover:bg-gray-50'
+              } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed`}
+              onDragEnter={handleDrag}
+              onDragLeave={handleDrag}
+              onDragOver={handleDrag}
+              onDrop={handleDrop}
             >
-              <Upload className="w-5 h-5 mb-1" />
-              Upload
+              <Upload className="w-6 h-6 mb-2" />
+              <span className="font-medium">
+                {dragActive ? 'Drop files here' : 'Upload'}
+              </span>
+              <span className="text-xs text-gray-500 mt-1 text-center">
+                or drag & drop PDFs
+              </span>
             </button>
             <button
               onClick={() => setShowUrlDialog(true)}
               disabled={uploading}
-              className="flex flex-col items-center justify-center px-3 py-3 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="flex flex-col items-center justify-center aspect-square border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              <Link className="w-5 h-5 mb-1" />
-              Links
+              <Link className="w-6 h-6 mb-2" />
+              <span className="font-medium">Links</span>
+              <span className="text-xs text-gray-500 mt-1">
+                from URLs
+              </span>
             </button>
-          </div>
-
-          {/* Drag and Drop Area */}
-          <div
-            className={`border-2 border-dashed rounded-lg p-6 text-center transition-all ${
-              dragActive 
-                ? 'border-blue-400 bg-blue-50' 
-                : 'border-gray-300 hover:border-gray-400'
-            }`}
-            onDragEnter={handleDrag}
-            onDragLeave={handleDrag}
-            onDragOver={handleDrag}
-            onDrop={handleDrop}
-          >
-            <FileText className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-            <p className="text-sm text-gray-600 mb-1">
-              Drop PDF files here or{' '}
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="text-blue-600 hover:text-blue-700 font-medium"
-              >
-                browse
-              </button>
-            </p>
-            <p className="text-xs text-gray-500">
-              Up to 10 PDFs, 50MB each
-            </p>
           </div>
 
           <input
@@ -399,7 +612,7 @@ const DocumentUpload = ({ projectId, onDocumentsUploaded, documents = [], onDele
                         </button>
                       )}
                       <button
-                        onClick={() => onDeleteDocument && onDeleteDocument(doc.id)}
+                        onClick={() => handleDeleteDocument(doc)}
                         className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                         title="Delete"
                       >
@@ -414,7 +627,7 @@ const DocumentUpload = ({ projectId, onDocumentsUploaded, documents = [], onDele
         </div>
       )}
 
-      {/* URL Dialog */}
+      {/* Enhanced URL Dialog with CORS proxy info */}
       {showUrlDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
@@ -428,6 +641,9 @@ const DocumentUpload = ({ projectId, onDocumentsUploaded, documents = [], onDele
                   <X className="w-5 h-5" />
                 </button>
               </div>
+              <p className="text-sm text-gray-500 mt-1">
+                Downloads PDFs via CORS proxy with automatic fallback
+              </p>
             </div>
             
             <div className="px-6 py-4">
@@ -438,7 +654,7 @@ const DocumentUpload = ({ projectId, onDocumentsUploaded, documents = [], onDele
                       type="url"
                       value={url}
                       onChange={(e) => updateUrl(index, e.target.value)}
-                      placeholder="https://example.com/document.pdf"
+                      placeholder="https://arxiv.org/pdf/2009.08020"
                       className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                     />
                     {urls.length > 1 && (
@@ -465,6 +681,8 @@ const DocumentUpload = ({ projectId, onDocumentsUploaded, documents = [], onDele
                   {urls.length}/10 URLs
                 </span>
               </div>
+
+
             </div>
             
             <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end space-x-3 rounded-b-lg">
@@ -479,7 +697,65 @@ const DocumentUpload = ({ projectId, onDocumentsUploaded, documents = [], onDele
                 disabled={uploading || urls.every(url => !url.trim())}
                 className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {uploading ? 'Uploading...' : 'Upload'}
+                {uploading ? 'Downloading...' : 'Upload'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteDialog && documentToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-medium text-gray-900">Delete Document</h3>
+                <button
+                  onClick={cancelDeleteDocument}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            
+            <div className="px-6 py-4">
+              <div className="flex items-start space-x-3">
+                <div className="flex-shrink-0">
+                  <AlertCircle className="w-6 h-6 text-red-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm text-gray-900 mb-2">
+                    Are you sure you want to delete this document? This will also remove all embeddings.
+                  </p>
+                  <div className="bg-gray-50 rounded-md p-3">
+                    <div className="text-sm font-medium text-gray-900 truncate">
+                      {documentToDelete.originalFilename || 'Untitled Document'}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      {formatFileSize(documentToDelete.fileSize)}
+                      {documentToDelete.chunkCount && documentToDelete.chunkCount > 0 && (
+                        <span> • {documentToDelete.chunkCount} chunks</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end space-x-3 rounded-b-lg">
+              <button
+                onClick={cancelDeleteDocument}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteDocument}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+              >
+                Delete
               </button>
             </div>
           </div>

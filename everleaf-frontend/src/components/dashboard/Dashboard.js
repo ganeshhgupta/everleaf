@@ -93,11 +93,17 @@ const Dashboard = () => {
       const baseTitle = `New Project ${new Date().toLocaleDateString()}`;
       const uniqueTitle = generateUniqueTitle(baseTitle, [...projects, ...collaboratedProjects]);
       
+      // Set simple content directly in the project
+      const simpleContent = `\\documentclass{article}
+\\begin{document}
+Hello Hello Hello :)
+\\end{document}`;
+      
       const projectData = {
         title: uniqueTitle,
         description: '',
-        content: '',
-        latexContent: ''
+        content: simpleContent,
+        latexContent: simpleContent
       };
 
       console.log('🔨 Creating simple project:', projectData);
@@ -107,7 +113,7 @@ const Dashboard = () => {
       console.log('✅ Project created:', response.data);
 
       if (response.data.success) {
-        // Navigate WITHOUT template flag (will use simple content)
+        // Navigate normally (content already set)
         navigate(`/editor/${response.data.project.id}`);
       } else {
         setError('Failed to create project. Please try again.');
@@ -128,11 +134,14 @@ const Dashboard = () => {
       const baseTitle = `Research Paper ${new Date().toLocaleDateString()}`;
       const uniqueTitle = generateUniqueTitle(baseTitle, [...projects, ...collaboratedProjects]);
       
+      // Import and set full template content directly
+      const { sampleLatex } = await import('../../utils/latexUtils');
+      
       const projectData = {
         title: uniqueTitle,
         description: 'Research paper from template',
-        content: '',
-        latexContent: ''
+        content: sampleLatex,
+        latexContent: sampleLatex
       };
 
       console.log('📄 Creating project from template:', projectData);
@@ -142,8 +151,8 @@ const Dashboard = () => {
       console.log('✅ Template project created:', response.data);
 
       if (response.data.success) {
-        // Navigate WITH template flag (will use full template content)
-        navigate(`/editor/${response.data.project.id}?template=true`);
+        // Navigate normally (content already set)
+        navigate(`/editor/${response.data.project.id}`);
       } else {
         setError('Failed to create project from template. Please try again.');
       }
@@ -153,6 +162,83 @@ const Dashboard = () => {
     } finally {
       setCreating(false);
     }
+  };
+
+  // Handle "Import Project" button - upload .tex file
+  const handleImportProject = async () => {
+    // Create file input element
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.tex,.latex';
+    fileInput.style.display = 'none';
+    
+    fileInput.onchange = async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      
+      try {
+        setCreating(true);
+        
+        // Validate file type
+        if (!file.name.toLowerCase().endsWith('.tex') && !file.name.toLowerCase().endsWith('.latex')) {
+          setError('Please select a .tex or .latex file');
+          return;
+        }
+        
+        // Read file content
+        const fileContent = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target.result);
+          reader.onerror = (e) => reject(e);
+          reader.readAsText(file);
+        });
+        
+        console.log('📄 Read .tex file:', file.name, 'Size:', file.size, 'bytes');
+        
+        // Generate project title from filename
+        const baseTitle = file.name.replace(/\.(tex|latex)$/i, '') || `Imported Project ${new Date().toLocaleDateString()}`;
+        const uniqueTitle = generateUniqueTitle(baseTitle, [...projects, ...collaboratedProjects]);
+        
+        const projectData = {
+          title: uniqueTitle,
+          description: `Imported from ${file.name}`,
+          content: fileContent,
+          latexContent: fileContent
+        };
+
+        console.log('📄 Creating project from imported file:', projectData.title);
+
+        const response = await api.post('/projects', projectData);
+        
+        console.log('✅ Import project created:', response.data);
+
+        if (response.data.success) {
+          // Navigate to editor with imported content
+          navigate(`/editor/${response.data.project.id}`);
+        } else {
+          setError('Failed to import project. Please try again.');
+        }
+        
+      } catch (error) {
+        console.error('❌ Failed to import project:', error);
+        
+        if (error.name === 'NotReadableError' || error.message.includes('read')) {
+          setError('Failed to read the file. Please make sure it\'s a valid .tex file.');
+        } else {
+          setError('Failed to import project. Please try again.');
+        }
+      } finally {
+        setCreating(false);
+        // Clean up file input
+        if (document.body.contains(fileInput)) {
+          document.body.removeChild(fileInput);
+        }
+      }
+    };
+    
+    // Trigger file selection
+    document.body.appendChild(fileInput);
+    fileInput.click();
   };
 
   const handleProjectClick = (projectId) => {
@@ -431,7 +517,11 @@ const Dashboard = () => {
                 <p className="text-sm text-gray-500">Research paper template</p>
               </button>
 
-              <button className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-md transition-shadow text-center">
+              <button 
+                onClick={handleImportProject}
+                disabled={creating}
+                className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-md transition-shadow text-center disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 <UserGroupIcon className="w-8 h-8 text-green-500 mx-auto mb-2" />
                 <h3 className="font-medium text-gray-900">Import Project</h3>
                 <p className="text-sm text-gray-500">From Overleaf or LaTeX</p>
