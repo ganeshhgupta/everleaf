@@ -18,12 +18,15 @@ import {
   ServerIcon,
   BeakerIcon,
   BoltIcon,
-  GlobeAltIcon
+  GlobeAltIcon,
+  Bars3Icon,
+  XMarkIcon
 } from '@heroicons/react/24/outline';
 
 const FeaturesPage = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [activeTab, setActiveTab] = useState('editor');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -32,6 +35,14 @@ const FeaturesPage = () => {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  const toggleMobileMenu = () => {
+    setIsMobileMenuOpen(!isMobileMenuOpen);
+  };
+
+  const closeMobileMenu = () => {
+    setIsMobileMenuOpen(false);
+  };
 
   // Add CSS animations
   useEffect(() => {
@@ -179,9 +190,9 @@ const FeaturesPage = () => {
     switch(tabId) {
       case 'editor':
         return (
-          <div className="bg-white rounded-2xl shadow-2xl p-8 border border-gray-100">
-            <div className="bg-gray-800 rounded-lg p-4 font-mono text-sm text-green-400 mb-4">
-              <div className="flex items-center mb-2">
+          <div className="bg-white rounded-2xl shadow-2xl p-4 md:p-8 border border-gray-100 overflow-hidden">
+            <div className="bg-gray-800 rounded-lg p-3 md:p-4 font-mono text-xs md:text-sm text-green-400 mb-4 overflow-x-auto">
+              <div className="flex items-center mb-2 min-w-max">
                 <div className="flex space-x-2">
                   <div className="w-3 h-3 bg-red-500 rounded-full"></div>
                   <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
@@ -189,7 +200,7 @@ const FeaturesPage = () => {
                 </div>
                 <span className="ml-4 text-gray-400">research_paper.tex</span>
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1 min-w-max">
                 <div>\documentclass&#123;article&#125;</div>
                 <div>\usepackage&#123;amsmath,cite&#125;</div>
                 <div>\title&#123;<span className="text-blue-400">Machine Learning in Healthcare</span>&#125;</div>
@@ -199,7 +210,7 @@ const FeaturesPage = () => {
                 <div className="text-purple-400">% AI: Found 23 relevant papers</div>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="bg-gray-50 rounded-lg p-4">
                 <h4 className="font-semibold text-gray-900 mb-2">Live Preview</h4>
                 <div className="h-32 bg-white rounded border-2 border-dashed border-gray-200 flex items-center justify-center">
@@ -225,53 +236,53 @@ const FeaturesPage = () => {
         );
       case 'research':
         return (
-          <div className="bg-white rounded-2xl shadow-2xl p-8 border border-gray-100">
-            <div className="grid grid-cols-3 gap-6">
-              <div className="col-span-1">
+          <div className="bg-white rounded-2xl shadow-2xl p-4 md:p-8 border border-gray-100 overflow-hidden">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-1">
                 <h4 className="font-semibold text-gray-900 mb-4">Research Library</h4>
                 <div className="space-y-3">
                   <div className="bg-gray-50 p-3 rounded-lg">
                     <div className="flex items-center space-x-2 mb-1">
-                      <DocumentTextIcon className="w-4 h-4 text-gray-500" />
-                      <span className="text-sm font-medium">AI in Healthcare.pdf</span>
+                      <DocumentTextIcon className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                      <span className="text-sm font-medium truncate">AI in Healthcare.pdf</span>
                     </div>
                     <p className="text-xs text-gray-600">Nature Medicine, 2024</p>
                   </div>
                   <div className="bg-gray-50 p-3 rounded-lg">
                     <div className="flex items-center space-x-2 mb-1">
-                      <DocumentTextIcon className="w-4 h-4 text-gray-500" />
-                      <span className="text-sm font-medium">ML Diagnostics.pdf</span>
+                      <DocumentTextIcon className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                      <span className="text-sm font-medium truncate">ML Diagnostics.pdf</span>
                     </div>
                     <p className="text-xs text-gray-600">Science, 2024</p>
                   </div>
                   <div className="bg-primary-50 p-3 rounded-lg border-2 border-primary-200">
                     <div className="flex items-center space-x-2 mb-1">
-                      <SparklesIcon className="w-4 h-4 text-primary-600" />
+                      <SparklesIcon className="w-4 h-4 text-primary-600 flex-shrink-0" />
                       <span className="text-sm font-medium text-primary-800">Processing...</span>
                     </div>
                     <p className="text-xs text-primary-600">Creating embeddings</p>
                   </div>
                 </div>
               </div>
-              <div className="col-span-2">
+              <div className="lg:col-span-2">
                 <h4 className="font-semibold text-gray-900 mb-4">Vector Search Results</h4>
                 <div className="bg-gray-50 rounded-lg p-4">
                   <div className="mb-3">
-                    <div className="flex items-center space-x-2 text-sm text-gray-600 mb-2">
-                      <MagnifyingGlassIcon className="w-4 h-4" />
-                      <span>Query: "machine learning accuracy in medical diagnosis"</span>
+                    <div className="flex items-start space-x-2 text-sm text-gray-600 mb-2">
+                      <MagnifyingGlassIcon className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                      <span className="break-words">Query: "machine learning accuracy in medical diagnosis"</span>
                     </div>
                     <div className="text-xs text-gray-500">Found 127 relevant passages across 23 papers</div>
                   </div>
                   <div className="space-y-2">
                     <div className="bg-white p-3 rounded border-l-4 border-green-500">
                       <div className="text-sm font-medium text-gray-900">Relevance: 94%</div>
-                      <p className="text-sm text-gray-700 mt-1">"Machine learning models achieved 97.3% accuracy in diabetic retinopathy detection..."</p>
+                      <p className="text-sm text-gray-700 mt-1 break-words">"Machine learning models achieved 97.3% accuracy in diabetic retinopathy detection..."</p>
                       <div className="text-xs text-gray-500 mt-1">Source: Nature Medicine 2024</div>
                     </div>
                     <div className="bg-white p-3 rounded border-l-4 border-blue-500">
                       <div className="text-sm font-medium text-gray-900">Relevance: 89%</div>
-                      <p className="text-sm text-gray-700 mt-1">"Deep learning approaches demonstrated superior performance compared to traditional methods..."</p>
+                      <p className="text-sm text-gray-700 mt-1 break-words">"Deep learning approaches demonstrated superior performance compared to traditional methods..."</p>
                       <div className="text-xs text-gray-500 mt-1">Source: Science 2024</div>
                     </div>
                   </div>
@@ -282,32 +293,32 @@ const FeaturesPage = () => {
         );
       case 'ai':
         return (
-          <div className="bg-white rounded-2xl shadow-2xl p-8 border border-gray-100">
-            <div className="grid grid-cols-2 gap-6">
+          <div className="bg-white rounded-2xl shadow-2xl p-4 md:p-8 border border-gray-100 overflow-hidden">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div>
                 <h4 className="font-semibold text-gray-900 mb-4">AI Chat Assistant</h4>
                 <div className="bg-gray-50 rounded-lg p-4 h-64 overflow-y-auto">
                   <div className="space-y-3">
                     <div className="flex items-start space-x-2">
-                      <div className="w-6 h-6 bg-primary-500 rounded-full flex items-center justify-center">
+                      <div className="w-6 h-6 bg-primary-500 rounded-full flex items-center justify-center flex-shrink-0">
                         <SparklesIcon className="w-3 h-3 text-white" />
                       </div>
-                      <div className="bg-white p-3 rounded-lg flex-1">
-                        <p className="text-sm">Hello! I can help you research and write your paper. What would you like to know?</p>
+                      <div className="bg-white p-3 rounded-lg flex-1 min-w-0">
+                        <p className="text-sm break-words">Hello! I can help you research and write your paper. What would you like to know?</p>
                       </div>
                     </div>
                     <div className="flex items-start space-x-2 justify-end">
-                      <div className="bg-primary-600 text-white p-3 rounded-lg max-w-xs">
-                        <p className="text-sm">Find me recent studies on AI accuracy in medical diagnosis and add relevant citations to my paper</p>
+                      <div className="bg-primary-600 text-white p-3 rounded-lg max-w-xs min-w-0">
+                        <p className="text-sm break-words">Find me recent studies on AI accuracy in medical diagnosis and add relevant citations to my paper</p>
                       </div>
                     </div>
                     <div className="flex items-start space-x-2">
-                      <div className="w-6 h-6 bg-primary-500 rounded-full flex items-center justify-center">
+                      <div className="w-6 h-6 bg-primary-500 rounded-full flex items-center justify-center flex-shrink-0">
                         <SparklesIcon className="w-3 h-3 text-white" />
                       </div>
-                      <div className="bg-white p-3 rounded-lg flex-1">
-                        <p className="text-sm">I found 23 relevant papers. I'll inject the most relevant findings with proper citations into your document. Would you like me to focus on any specific aspect?</p>
-                        <div className="mt-2 flex space-x-2">
+                      <div className="bg-white p-3 rounded-lg flex-1 min-w-0">
+                        <p className="text-sm break-words">I found 23 relevant papers. I'll inject the most relevant findings with proper citations into your document. Would you like me to focus on any specific aspect?</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
                           <button className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Insert Citations</button>
                           <button className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Add to LaTeX</button>
                         </div>
@@ -318,8 +329,8 @@ const FeaturesPage = () => {
               </div>
               <div>
                 <h4 className="font-semibold text-gray-900 mb-4">Real-time Injection</h4>
-                <div className="bg-gray-800 rounded-lg p-4 font-mono text-sm text-green-400">
-                  <div className="space-y-1">
+                <div className="bg-gray-800 rounded-lg p-4 font-mono text-xs md:text-sm text-green-400 overflow-x-auto">
+                  <div className="space-y-1 min-w-max">
                     <div>\section&#123;Results&#125;</div>
                     <div><span className="bg-yellow-400 text-gray-900 px-1">Recent studies demonstrate that machine learning models achieve accuracy rates of 95-98\% in medical image classification \cite&#123;smith2024,jones2024&#125;</span></div>
                     <div>\subsection&#123;Performance Metrics&#125;</div>
@@ -329,10 +340,10 @@ const FeaturesPage = () => {
                 </div>
                 <div className="mt-4 bg-primary-50 p-3 rounded-lg">
                   <div className="flex items-center space-x-2 text-primary-700">
-                    <LightBulbIcon className="w-4 h-4" />
+                    <LightBulbIcon className="w-4 h-4 flex-shrink-0" />
                     <span className="text-sm font-medium">AI Suggestion</span>
                   </div>
-                  <p className="text-sm text-primary-600 mt-1">I've added 3 citations and 2 statistical findings to your Results section. Would you like me to add a comparison table?</p>
+                  <p className="text-sm text-primary-600 mt-1 break-words">I've added 3 citations and 2 statistical findings to your Results section. Would you like me to add a comparison table?</p>
                 </div>
               </div>
             </div>
@@ -340,43 +351,43 @@ const FeaturesPage = () => {
         );
       case 'collaboration':
         return (
-          <div className="bg-white rounded-2xl shadow-2xl p-8 border border-gray-100">
-            <div className="grid grid-cols-2 gap-6">
+          <div className="bg-white rounded-2xl shadow-2xl p-4 md:p-8 border border-gray-100 overflow-hidden">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div>
                 <h4 className="font-semibold text-gray-900 mb-4">Live Collaboration</h4>
                 <div className="space-y-4">
                   <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
+                    <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0">
                       JD
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center space-x-2">
-                        <span className="text-sm font-medium">Dr. Jane Doe</span>
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span className="text-sm font-medium truncate">Dr. Jane Doe</span>
+                        <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0"></div>
                         <span className="text-xs text-gray-500">Online</span>
                       </div>
-                      <p className="text-xs text-gray-600">Currently editing Introduction</p>
+                      <p className="text-xs text-gray-600 truncate">Currently editing Introduction</p>
                     </div>
                   </div>
                   <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
+                    <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0">
                       MS
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center space-x-2">
-                        <span className="text-sm font-medium">Mike Smith</span>
-                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                        <span className="text-sm font-medium truncate">Mike Smith</span>
+                        <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
                         <span className="text-xs text-gray-500">Online</span>
                       </div>
-                      <p className="text-xs text-gray-600">Reviewing Results section</p>
+                      <p className="text-xs text-gray-600 truncate">Reviewing Results section</p>
                     </div>
                   </div>
                   <div className="bg-gray-50 rounded-lg p-3">
                     <h5 className="text-sm font-medium text-gray-900 mb-2">Recent Activity</h5>
                     <div className="space-y-1 text-xs text-gray-600">
-                      <p>• Jane added citation to line 47</p>
-                      <p>• Mike commented on methodology</p>
-                      <p>• You updated bibliography</p>
+                      <p className="break-words">• Jane added citation to line 47</p>
+                      <p className="break-words">• Mike commented on methodology</p>
+                      <p className="break-words">• You updated bibliography</p>
                     </div>
                   </div>
                 </div>
@@ -390,7 +401,7 @@ const FeaturesPage = () => {
                         <span className="text-sm font-medium">Jane Doe</span>
                         <span className="text-xs text-gray-500">2 hours ago</span>
                       </div>
-                      <p className="text-sm text-gray-700">This section needs more recent citations. Consider adding the 2024 Nature paper.</p>
+                      <p className="text-sm text-gray-700 break-words">This section needs more recent citations. Consider adding the 2024 Nature paper.</p>
                       <div className="mt-2">
                         <button className="text-xs text-primary-600 hover:text-primary-700">Reply</button>
                       </div>
@@ -400,7 +411,7 @@ const FeaturesPage = () => {
                         <span className="text-sm font-medium">Mike Smith</span>
                         <span className="text-xs text-gray-500">4 hours ago</span>
                       </div>
-                      <p className="text-sm text-gray-700">Great analysis! The statistical approach looks solid.</p>
+                      <p className="text-sm text-gray-700 break-words">Great analysis! The statistical approach looks solid.</p>
                       <div className="mt-2">
                         <span className="text-xs text-green-600">✓ Resolved</span>
                       </div>
@@ -409,7 +420,7 @@ const FeaturesPage = () => {
                 </div>
                 <div className="mt-4 bg-primary-50 rounded-lg p-3">
                   <h5 className="text-sm font-medium text-primary-800 mb-2">Export & Share</h5>
-                  <div className="flex space-x-2">
+                  <div className="flex flex-wrap gap-2">
                     <button className="text-xs bg-primary-600 text-white px-3 py-1 rounded">Export PDF</button>
                     <button className="text-xs bg-white text-primary-600 border border-primary-600 px-3 py-1 rounded">Share Link</button>
                   </div>
@@ -424,7 +435,7 @@ const FeaturesPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white overflow-x-hidden">
       {/* Navigation */}
       <nav className={`fixed w-full z-50 transition-all duration-300 ${
         isScrolled ? 'bg-white/90 backdrop-blur-md shadow-lg' : 'bg-transparent'
@@ -448,12 +459,71 @@ const FeaturesPage = () => {
               <span className="text-2xl font-bold text-gray-900">Everleaf</span>
             </a>
             
+            {/* Desktop Menu */}
             <div className="hidden md:flex items-center space-x-8">
               <a href="#features" className="text-primary-600 font-medium">Features</a>
               <a href="/#about" className="text-gray-600 hover:text-primary-600 transition-colors">About</a>
               <a href="#pricing" className="text-gray-600 hover:text-primary-600 transition-colors">Pricing</a>
               <a href="/login" className="text-primary-600 hover:text-primary-700 font-medium">Sign In</a>
               <a href="/signup" className="bg-primary-600 hover:bg-primary-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">Get Started</a>
+            </div>
+
+            {/* Mobile Menu Button */}
+            <div className="md:hidden">
+              <button 
+                onClick={toggleMobileMenu}
+                className="text-gray-600 hover:text-gray-900 p-2"
+                aria-label="Toggle mobile menu"
+              >
+                {isMobileMenuOpen ? (
+                  <XMarkIcon className="w-6 h-6" />
+                ) : (
+                  <Bars3Icon className="w-6 h-6" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Mobile Menu */}
+          <div className={`md:hidden transition-all duration-300 ease-in-out ${
+            isMobileMenuOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+          } overflow-hidden`}>
+            <div className="px-2 pt-2 pb-3 space-y-1 bg-white/95 backdrop-blur-md rounded-lg mt-2 shadow-lg">
+              <a 
+                href="#features" 
+                className="block px-3 py-2 text-primary-600 font-medium hover:bg-gray-50 rounded-md transition-colors"
+                onClick={closeMobileMenu}
+              >
+                Features
+              </a>
+              <a 
+                href="/#about" 
+                className="block px-3 py-2 text-gray-600 hover:text-primary-600 hover:bg-gray-50 rounded-md transition-colors"
+                onClick={closeMobileMenu}
+              >
+                About
+              </a>
+              <a 
+                href="#pricing" 
+                className="block px-3 py-2 text-gray-600 hover:text-primary-600 hover:bg-gray-50 rounded-md transition-colors"
+                onClick={closeMobileMenu}
+              >
+                Pricing
+              </a>
+              <a 
+                href="/login" 
+                className="block px-3 py-2 text-primary-600 hover:text-primary-700 font-medium hover:bg-gray-50 rounded-md transition-colors"
+                onClick={closeMobileMenu}
+              >
+                Sign In
+              </a>
+              <a 
+                href="/signup" 
+                className="block px-3 py-2 bg-primary-600 text-white font-medium rounded-md hover:bg-primary-700 transition-colors text-center"
+                onClick={closeMobileMenu}
+              >
+                Get Started
+              </a>
             </div>
           </div>
         </div>
@@ -463,13 +533,13 @@ const FeaturesPage = () => {
       <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto text-center">
           <div>
-            <h1 className="text-5xl lg:text-6xl font-bold text-gray-900 mb-6 leading-tight">
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 mb-6 leading-tight">
               Powerful Features for{' '}
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-600 to-green-600">
                 Modern Research
               </span>
             </h1>
-            <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto leading-relaxed">
+            <p className="text-lg sm:text-xl text-gray-600 mb-8 max-w-3xl mx-auto leading-relaxed">
               Discover how Everleaf combines advanced AI, intuitive LaTeX editing, and intelligent research tools 
               to revolutionize your academic writing workflow.
             </p>
@@ -493,10 +563,10 @@ const FeaturesPage = () => {
             className="text-center mb-12 opacity-0 translate-y-4 animate-fadeInUp"
             style={{ animationDelay: '0.1s', animationFillMode: 'forwards' }}
           >
-            <h2 className="text-4xl font-bold text-gray-900 mb-4">
+            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
               See Everleaf in Action
             </h2>
-            <p className="text-xl text-gray-600">
+            <p className="text-lg sm:text-xl text-gray-600">
               Explore our core features through interactive demos
             </p>
           </div>
@@ -505,12 +575,12 @@ const FeaturesPage = () => {
             className="mb-8 opacity-0 translate-y-4 animate-fadeInUp"
             style={{ animationDelay: '0.2s', animationFillMode: 'forwards' }}
           >
-            <div className="flex flex-wrap justify-center gap-4">
+            <div className="flex flex-wrap justify-center gap-2 sm:gap-4">
               {tabs.map((tab, index) => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center space-x-2 px-6 py-3 rounded-lg font-medium transition-all duration-300 transform hover:scale-105 ${
+                  className={`flex items-center space-x-2 px-3 sm:px-6 py-2 sm:py-3 rounded-lg font-medium transition-all duration-300 transform hover:scale-105 text-sm sm:text-base ${
                     activeTab === tab.id
                       ? 'bg-primary-600 text-white shadow-lg'
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -521,8 +591,9 @@ const FeaturesPage = () => {
                     animation: `fadeInUp 0.6s ease-out ${0.3 + index * 0.1}s forwards`
                   }}
                 >
-                  <tab.icon className="w-5 h-5" />
-                  <span>{tab.label}</span>
+                  <tab.icon className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span className="hidden sm:inline">{tab.label}</span>
+                  <span className="sm:hidden">{tab.label.split(' ')[0]}</span>
                 </button>
               ))}
             </div>
@@ -544,15 +615,15 @@ const FeaturesPage = () => {
             className="text-center mb-16 opacity-0 translate-y-4 animate-fadeInUp"
             style={{ animationDelay: '0.1s', animationFillMode: 'forwards' }}
           >
-            <h2 className="text-4xl font-bold text-gray-900 mb-4">
+            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
               How Everleaf Works
             </h2>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+            <p className="text-lg sm:text-xl text-gray-600 max-w-3xl mx-auto">
               From research upload to final publication, here's how Everleaf streamlines your entire workflow
             </p>
           </div>
 
-          <div className="grid lg:grid-cols-5 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-8">
             {workflowSteps.map((step, index) => (
               <div
                 key={index}
@@ -584,15 +655,15 @@ const FeaturesPage = () => {
             className="text-center mb-16 opacity-0 translate-y-4 animate-fadeInUp"
             style={{ animationDelay: '0.1s', animationFillMode: 'forwards' }}
           >
-            <h2 className="text-4xl font-bold text-gray-900 mb-4">
+            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
               Complete Feature Overview
             </h2>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+            <p className="text-lg sm:text-xl text-gray-600 max-w-3xl mx-auto">
               Every tool you need for professional academic writing, research, and collaboration
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {coreFeatures.map((feature, index) => (
               <div
                 key={index}
@@ -609,8 +680,8 @@ const FeaturesPage = () => {
                 <ul className="space-y-1">
                   {feature.details.map((detail, i) => (
                     <li key={i} className="text-sm text-gray-500 flex items-center transform transition-transform duration-200 hover:translate-x-1">
-                      <div className="w-1.5 h-1.5 bg-primary-500 rounded-full mr-2 transition-all duration-200 group-hover:bg-primary-600" />
-                      {detail}
+                      <div className="w-1.5 h-1.5 bg-primary-500 rounded-full mr-2 transition-all duration-200 group-hover:bg-primary-600 flex-shrink-0" />
+                      <span className="break-words">{detail}</span>
                     </li>
                   ))}
                 </ul>
@@ -627,15 +698,15 @@ const FeaturesPage = () => {
             className="text-center mb-16 opacity-0 translate-y-4 animate-fadeInUp"
             style={{ animationDelay: '0.1s', animationFillMode: 'forwards' }}
           >
-            <h2 className="text-4xl font-bold mb-4">
+            <h2 className="text-3xl sm:text-4xl font-bold mb-4">
               Built on Cutting-Edge Technology
             </h2>
-            <p className="text-xl text-gray-300 max-w-3xl mx-auto">
+            <p className="text-lg sm:text-xl text-gray-300 max-w-3xl mx-auto">
               Advanced AI, secure cloud infrastructure, and modern web technologies power your research workflow
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
             {[
               {
                 icon: SparklesIcon,
@@ -673,7 +744,7 @@ const FeaturesPage = () => {
                   <tech.icon className="w-8 h-8 text-white" />
                 </div>
                 <h3 className="text-lg font-semibold mb-2">{tech.title}</h3>
-                <p className="text-gray-300 text-sm">{tech.description}</p>
+                <p className="text-gray-300 text-sm break-words">{tech.description}</p>
               </div>
             ))}
           </div>
@@ -687,54 +758,54 @@ const FeaturesPage = () => {
             className="opacity-0 translate-y-4 animate-fadeInUp"
             style={{ animationDelay: '0.1s', animationFillMode: 'forwards' }}
           >
-            <h2 className="text-4xl font-bold text-gray-900 mb-6">
+            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-6">
               Simple, Transparent Pricing
             </h2>
-            <p className="text-xl text-gray-600 mb-12">
+            <p className="text-lg sm:text-xl text-gray-600 mb-12">
               Get started with all features completely free. No hidden costs, no commitments.
             </p>
           </div>
           
           <div 
-            className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100 max-w-md mx-auto opacity-0 translate-y-4 animate-fadeInUp"
+            className="bg-white rounded-2xl shadow-xl p-6 sm:p-8 border border-gray-100 max-w-md mx-auto opacity-0 translate-y-4 animate-fadeInUp"
             style={{ animationDelay: '0.2s', animationFillMode: 'forwards' }}
           >
             <div className="text-center">
               <h3 className="text-2xl font-bold text-gray-900 mb-2">Free Plan</h3>
               <div className="mb-6">
-                <span className="text-5xl font-bold text-primary-600">$0</span>
+                <span className="text-4xl sm:text-5xl font-bold text-primary-600">$0</span>
                 <span className="text-gray-500 ml-2">forever</span>
               </div>
               <ul className="text-left space-y-3 mb-8">
                 <li className="flex items-center">
-                  <svg className="w-5 h-5 text-green-500 mr-3" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-5 h-5 text-green-500 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
-                  Unlimited LaTeX projects
+                  <span className="break-words">Unlimited LaTeX projects</span>
                 </li>
                 <li className="flex items-center">
-                  <svg className="w-5 h-5 text-green-500 mr-3" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-5 h-5 text-green-500 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
-                  AI research assistant
+                  <span className="break-words">AI research assistant</span>
                 </li>
                 <li className="flex items-center">
-                  <svg className="w-5 h-5 text-green-500 mr-3" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-5 h-5 text-green-500 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
-                  Real-time collaboration
+                  <span className="break-words">Real-time collaboration</span>
                 </li>
                 <li className="flex items-center">
-                  <svg className="w-5 h-5 text-green-500 mr-3" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-5 h-5 text-green-500 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
-                  Cloud storage & sync
+                  <span className="break-words">Cloud storage & sync</span>
                 </li>
                 <li className="flex items-center">
-                  <svg className="w-5 h-5 text-green-500 mr-3" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-5 h-5 text-green-500 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
-                  PDF export & sharing
+                  <span className="break-words">PDF export & sharing</span>
                 </li>
               </ul>
               <a 
@@ -758,10 +829,10 @@ const FeaturesPage = () => {
       {/* CTA Section */}
       <section className="py-20 bg-gradient-to-r from-primary-600 to-green-600 px-4 sm:px-6 lg:px-8">
         <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-4xl font-bold text-white mb-6">
+          <h2 className="text-3xl sm:text-4xl font-bold text-white mb-6">
             Ready to Experience the Future of Research Writing?
           </h2>
-          <p className="text-xl text-primary-100 mb-8">
+          <p className="text-lg sm:text-xl text-primary-100 mb-8">
             Join thousands of researchers who've already transformed their workflow with Everleaf's powerful features.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -782,7 +853,7 @@ const FeaturesPage = () => {
       {/* Footer */}
       <footer className="bg-gray-900 text-white py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div>
               <a href="/" className="flex items-center space-x-2 mb-4">
                 <img 
