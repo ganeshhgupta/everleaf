@@ -10,14 +10,20 @@ import {
   ChevronDoubleRightIcon,
   ExclamationTriangleIcon,
   XMarkIcon,
-  ArrowLeftIcon
+  ArrowLeftIcon,
+  InformationCircleIcon,
+  ExclamationCircleIcon,
+  NoSymbolIcon,
+  CogIcon,
+  DocumentDuplicateIcon,
+  LightBulbIcon
 } from '@heroicons/react/24/outline';
 
 const PDFPreview = ({
   pdfUrl,
   isCompiling,
   editorWidth,
-  compileErrors = [], // Added compile errors prop
+  compileErrors = [], // Enhanced error objects with more details
   // NEW: Mobile-specific props (optional)
   isMobile,
   mobilePreviewMode,
@@ -31,7 +37,8 @@ const PDFPreview = ({
   const [renderingPages, setRenderingPages] = useState(new Set());
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [showErrorOverlay, setShowErrorOverlay] = useState(false); // Error overlay state
+  const [showErrorOverlay, setShowErrorOverlay] = useState(false);
+  const [selectedErrorIndex, setSelectedErrorIndex] = useState(0); // For detailed error view
   
   // NEW: Mobile header auto-hide state
   const [isHeaderVisible, setIsHeaderVisible] = useState(true);
@@ -43,6 +50,103 @@ const PDFPreview = ({
 
   // Debounced zoom to prevent flickering
   const [zoomTimeout, setZoomTimeout] = useState(null);
+
+  // Safe error rendering function
+  const safeRender = (value) => {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number') return value.toString();
+    if (typeof value === 'boolean') return value.toString();
+    if (Array.isArray(value)) return value.join(', ');
+    if (typeof value === 'object') {
+      try {
+        return JSON.stringify(value);
+      } catch (e) {
+        return '[Complex Object]';
+      }
+    }
+    return String(value);
+  };
+
+  // NEW: Enhanced error categorization
+  const categorizeErrors = (errors) => {
+    const categories = {
+      critical: [],
+      syntax: [],
+      warnings: [],
+      missing: []
+    };
+    
+    errors.forEach(error => {
+      switch (error.type) {
+        case 'latex_error':
+        case 'compilation_error':
+        case 'system_error':
+          categories.critical.push(error);
+          break;
+        case 'syntax':
+        case 'undefined_command':
+        case 'math_mode':
+          categories.syntax.push(error);
+          break;
+        case 'warning':
+          categories.warnings.push(error);
+          break;
+        case 'missing_file':
+        case 'package_error':
+          categories.missing.push(error);
+          break;
+        default:
+          categories.critical.push(error);
+      }
+    });
+    
+    return categories;
+  };
+
+  // Get error icon based on type
+  const getErrorIcon = (errorType) => {
+    switch (errorType) {
+      case 'critical':
+      case 'latex_error':
+      case 'compilation_error':
+      case 'system_error':
+        return <ExclamationCircleIcon className="w-5 h-5 text-red-500" />;
+      case 'syntax':
+      case 'undefined_command':
+      case 'math_mode':
+        return <CogIcon className="w-5 h-5 text-orange-500" />;
+      case 'warning':
+        return <ExclamationTriangleIcon className="w-5 h-5 text-yellow-500" />;
+      case 'missing_file':
+      case 'package_error':
+        return <NoSymbolIcon className="w-5 h-5 text-blue-500" />;
+      default:
+        return <InformationCircleIcon className="w-5 h-5 text-gray-500" />;
+    }
+  };
+
+  // Get error color based on type
+  const getErrorColor = (errorType) => {
+    switch (errorType) {
+      case 'critical':
+      case 'latex_error':
+      case 'compilation_error':
+      case 'system_error':
+        return 'red';
+      case 'syntax':
+      case 'undefined_command':
+      case 'math_mode':
+        return 'orange';
+      case 'warning':
+        return 'yellow';
+      case 'missing_file':
+      case 'package_error':
+        return 'blue';
+      default:
+        return 'gray';
+    }
+  };
 
   // NEW: Mobile header auto-hide scroll handler
   useEffect(() => {
@@ -68,7 +172,7 @@ const PDFPreview = ({
       // Auto-show header after scroll stops
       const newTimeout = setTimeout(() => {
         setIsHeaderVisible(true);
-      }, 3000); // Show header 3 seconds after scroll stops
+      }, 3000);
       
       setScrollTimeout(newTimeout);
     };
@@ -108,6 +212,9 @@ const PDFPreview = ({
   useEffect(() => {
     if (compileErrors && compileErrors.length > 0) {
       setShowErrorOverlay(true);
+      setSelectedErrorIndex(0);
+    } else {
+      setShowErrorOverlay(false);
     }
   }, [compileErrors]);
 
@@ -141,7 +248,7 @@ const PDFPreview = ({
       setError(null);
       setRenderedPages(new Map());
       setRenderingPages(new Set());
-      setShowErrorOverlay(false); // Hide error overlay when loading new PDF
+      setShowErrorOverlay(false);
       
       try {
         const pdf = await window.pdfjsLib.getDocument(pdfUrl).promise;
@@ -170,7 +277,7 @@ const PDFPreview = ({
     const existingPageData = renderedPages.get(pageNum);
     const currentScale = zoom / 100;
     if (existingPageData && Math.abs(existingPageData.scale - currentScale) < 0.01) {
-      return; // Already rendered at this zoom level
+      return;
     }
     
     setRenderingPages(prev => new Set([...prev, pageNum]));
@@ -242,14 +349,14 @@ const PDFPreview = ({
         setTimeout(() => renderPage(pageNum), index * 100);
       });
       
-    }, 150); // 150ms debounce
+    }, 150);
     
     setZoomTimeout(timeout);
     
     return () => {
       if (timeout) clearTimeout(timeout);
     };
-  }, [pdfDocument, currentPage, zoom, totalPages]); // Removed renderedPages dependency
+  }, [pdfDocument, currentPage, zoom, totalPages]);
 
   // Zoom controls with debouncing
   const updateZoom = useCallback((newZoom) => {
@@ -276,7 +383,7 @@ const PDFPreview = ({
 
   // Handle mouse wheel zoom with proper event handling (desktop only)
   useEffect(() => {
-    if (isMobile) return; // Skip wheel zoom on mobile
+    if (isMobile) return;
     
     const handleWheel = (e) => {
       if (e.ctrlKey || e.metaKey) {
@@ -293,7 +400,6 @@ const PDFPreview = ({
 
     const container = containerRef.current;
     if (container) {
-      // Add non-passive event listener to allow preventDefault
       container.addEventListener('wheel', handleWheel, { passive: false });
       return () => container.removeEventListener('wheel', handleWheel);
     }
@@ -317,15 +423,252 @@ const PDFPreview = ({
     return canvasRefs.current.get(pageNum);
   };
 
-  // NEW: Mobile-specific rendering - FIXED TO REMOVE PREVIEW HEADER
+  // Enhanced Error Overlay Component
+  const ErrorOverlayContent = ({ errors, selectedIndex, onSelectError, onClose, isMobile = false }) => {
+    const categorizedErrors = categorizeErrors(errors);
+    const currentError = errors[selectedIndex];
+    
+    const renderCodeContext = (context) => {
+      if (!context || !context.lines || !Array.isArray(context.lines)) return null;
+      
+      return (
+        <div className="bg-gray-900 rounded-lg p-4 mt-3">
+          <div className="text-xs text-gray-400 mb-2 font-mono">
+            {safeRender(currentError.file) || 'main.tex'} (around line {safeRender((context.startLine || 0) + (context.errorLineIndex || 0))})
+          </div>
+          <pre className="text-sm font-mono overflow-x-auto">
+            {context.lines.map((line, idx) => (
+              <div
+                key={idx}
+                className={`${
+                  idx === context.errorLineIndex
+                    ? 'bg-red-900 bg-opacity-50 text-red-200'
+                    : 'text-gray-300'
+                } py-0.5 px-2 ${idx === context.errorLineIndex ? 'border-l-4 border-red-500' : ''}`}
+              >
+                <span className="text-gray-500 mr-3 select-none">
+                  {((context.startLine || 0) + idx).toString().padStart(3)}
+                </span>
+                {safeRender(line) || ' '}
+              </div>
+            ))}
+          </pre>
+        </div>
+      );
+    };
+
+    const renderErrorSummary = () => {
+      const total = errors.length;
+      const critical = categorizedErrors.critical.length;
+      const syntax = categorizedErrors.syntax.length;
+      const warnings = categorizedErrors.warnings.length;
+      const missing = categorizedErrors.missing.length;
+
+      return (
+        <div className="flex flex-wrap gap-2 mb-4">
+          {critical > 0 && (
+            <div className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-xs font-medium flex items-center space-x-1">
+              <ExclamationCircleIcon className="w-3 h-3" />
+              <span>{critical} Critical</span>
+            </div>
+          )}
+          {syntax > 0 && (
+            <div className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-xs font-medium flex items-center space-x-1">
+              <CogIcon className="w-3 h-3" />
+              <span>{syntax} Syntax</span>
+            </div>
+          )}
+          {missing > 0 && (
+            <div className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-xs font-medium flex items-center space-x-1">
+              <NoSymbolIcon className="w-3 h-3" />
+              <span>{missing} Missing</span>
+            </div>
+          )}
+          {warnings > 0 && (
+            <div className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-xs font-medium flex items-center space-x-1">
+              <ExclamationTriangleIcon className="w-3 h-3" />
+              <span>{warnings} Warnings</span>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    return (
+      <div className="bg-white rounded-2xl shadow-xl border border-red-200 max-w-4xl w-full max-h-[90%] overflow-hidden flex flex-col">
+        {/* Enhanced Error Header */}
+        <div className="bg-gradient-to-r from-red-50 to-orange-50 border-b border-red-200 px-6 py-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center space-x-3">
+              <ExclamationTriangleIcon className="w-6 h-6 text-red-500" />
+              <h3 className="text-lg font-semibold text-red-800">
+                LaTeX Compilation Failed
+              </h3>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-red-400 hover:text-red-600 transition-colors p-2 rounded-full hover:bg-red-100"
+              title="Close error overlay"
+            >
+              <XMarkIcon className="w-5 h-5" />
+            </button>
+          </div>
+          {renderErrorSummary()}
+        </div>
+
+        {/* Error Content */}
+        <div className="flex flex-1 overflow-hidden">
+          {/* Error List Sidebar */}
+          <div className="w-1/3 border-r border-gray-200 bg-gray-50 overflow-y-auto">
+            <div className="p-4">
+              <h4 className="text-sm font-semibold text-gray-700 mb-3">
+                All Errors ({errors.length})
+              </h4>
+              <div className="space-y-2">
+                {errors.map((error, index) => (
+                  <button
+                    key={index}
+                    onClick={() => onSelectError(index)}
+                    className={`w-full text-left p-3 rounded-lg border transition-all ${
+                      selectedIndex === index
+                        ? 'bg-white border-blue-300 shadow-sm'
+                        : 'bg-white border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-start space-x-2">
+                      {getErrorIcon(error.type)}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-gray-900 truncate">
+                          {error.type === 'latex_error' ? 'LaTeX Error' :
+                           error.type === 'syntax' ? 'Syntax Error' :
+                           error.type === 'missing_file' ? 'Missing File' :
+                           error.type === 'package_error' ? 'Package Error' :
+                           error.type === 'undefined_command' ? 'Undefined Command' :
+                           error.type === 'math_mode' ? 'Math Mode Error' :
+                           error.type === 'compilation_error' ? 'Compilation Error' :
+                           error.type === 'pdf_error' ? 'PDF Error' :
+                           error.type === 'undefined_environment' ? 'Undefined Environment' :
+                           'Compilation Error'}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1 truncate">
+                          {error.line ? `Line ${error.line}` : 'Unknown location'}
+                          {error.file && error.file !== 'main.tex' ? ` in ${error.file}` : ''}
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Error Details */}
+          <div className="flex-1 overflow-y-auto">
+            <div className="p-6">
+              {currentError && (
+                <>
+                  {/* Error Header */}
+                  <div className="flex items-start space-x-3 mb-4">
+                    {getErrorIcon(currentError.type)}
+                    <div className="flex-1">
+                      <h4 className="text-lg font-semibold text-gray-900">
+                        {currentError.type === 'latex_error' ? 'LaTeX Error' :
+                         currentError.type === 'syntax' ? 'Syntax Error' :
+                         currentError.type === 'missing_file' ? 'Missing File' :
+                         currentError.type === 'package_error' ? 'Package Error' :
+                         currentError.type === 'undefined_command' ? 'Undefined Command' :
+                         currentError.type === 'math_mode' ? 'Math Mode Error' :
+                         currentError.type === 'compilation_error' ? 'Compilation Error' :
+                         currentError.type === 'pdf_error' ? 'PDF Error' :
+                         currentError.type === 'undefined_environment' ? 'Undefined Environment' :
+                         'Compilation Error'}
+                      </h4>
+                      <div className="text-sm text-gray-600 mt-1">
+                        {currentError.line && (
+                          <span className="inline-flex items-center space-x-1">
+                            <DocumentDuplicateIcon className="w-4 h-4" />
+                            <span>Line {currentError.line}</span>
+                            {currentError.file && currentError.file !== 'main.tex' && (
+                              <span> in {currentError.file}</span>
+                            )}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Error Message */}
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                    <pre className="text-sm text-red-800 font-mono whitespace-pre-wrap break-words">
+                      {safeRender(currentError.message)}
+                    </pre>
+                  </div>
+
+                  {/* Code Context */}
+                  {currentError.context && renderCodeContext(currentError.context)}
+
+                  {/* Suggestion */}
+                  {currentError.suggestion && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+                      <div className="flex items-start space-x-2">
+                        <LightBulbIcon className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <h5 className="text-sm font-semibold text-blue-800 mb-1">
+                            Suggestion
+                          </h5>
+                          <p className="text-sm text-blue-700">
+                            {safeRender(currentError.suggestion)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="bg-gray-50 border-t border-gray-200 px-6 py-4 flex justify-between items-center">
+          <div className="text-sm text-gray-600">
+            Error {selectedIndex + 1} of {errors.length}
+          </div>
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => onSelectError(Math.max(0, selectedIndex - 1))}
+              disabled={selectedIndex === 0}
+              className="px-3 py-2 bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 text-sm font-medium rounded transition-colors"
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => onSelectError(Math.min(errors.length - 1, selectedIndex + 1))}
+              disabled={selectedIndex === errors.length - 1}
+              className="px-3 py-2 bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 text-sm font-medium rounded transition-colors"
+            >
+              Next
+            </button>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium rounded transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // NEW: Mobile-specific rendering
   if (isMobile) {
     return (
       <div className="bg-white h-full flex flex-col relative">
-        {/* Mobile Header - Only Navigation and Controls (No Preview Section) */}
+        {/* Mobile Header */}
         <div className={`absolute top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 shadow-sm transition-transform duration-300 ease-in-out ${
           isHeaderVisible ? 'translate-y-0' : '-translate-y-full'
         }`}>
-          {/* Single Row: Back button, Navigation, Error, Status, and Zoom Controls */}
           <div className="px-3 py-2 flex items-center justify-between">
             {/* Left: Back button and Page Navigation */}
             <div className="flex items-center space-x-2">
@@ -390,14 +733,17 @@ const PDFPreview = ({
             
             {/* Right: Error, Status, and Zoom Controls */}
             <div className="flex items-center space-x-2">
-              {/* Mobile Error indicator */}
+              {/* Enhanced Mobile Error indicator */}
               {compileErrors && compileErrors.length > 0 && (
-                <div className="flex items-center space-x-1">
+                <button
+                  onClick={() => setShowErrorOverlay(true)}
+                  className="flex items-center space-x-1 px-2 py-1 bg-red-100 hover:bg-red-200 rounded-md transition-colors"
+                >
                   <ExclamationTriangleIcon className="w-4 h-4 text-red-500" />
                   <span className="text-xs text-red-600 font-medium">
                     {compileErrors.length}
                   </span>
-                </div>
+                </button>
               )}
               
               {/* Mobile Status */}
@@ -449,7 +795,7 @@ const PDFPreview = ({
           </div>
         </div>
         
-        {/* Mobile PDF Content with reduced top padding */}
+        {/* Mobile PDF Content */}
         <div 
           ref={containerRef}
           className="flex-1 bg-white overflow-auto relative pt-14"
@@ -518,15 +864,15 @@ const PDFPreview = ({
             </div>
           )}
 
-          {/* Mobile Error Overlay */}
+          {/* Enhanced Mobile Error Overlay */}
           {showErrorOverlay && compileErrors && compileErrors.length > 0 && (
-            <div className="absolute inset-0 bg-black bg-opacity-30 flex items-center justify-center p-4 z-10">
-              <div className="bg-white rounded-2xl shadow-xl border border-red-200 max-w-lg w-full max-h-[80%] overflow-hidden">
+            <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-2xl shadow-xl border border-red-200 max-w-lg w-full max-h-[90%] overflow-hidden flex flex-col">
                 {/* Mobile Error Header */}
-                <div className="bg-red-50 border-b border-red-200 px-6 py-4 flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <ExclamationTriangleIcon className="w-6 h-6 text-red-500" />
-                    <h3 className="text-lg font-semibold text-red-800">
+                <div className="bg-red-50 border-b border-red-200 px-4 py-3 flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <ExclamationTriangleIcon className="w-5 h-5 text-red-500" />
+                    <h3 className="text-base font-semibold text-red-800">
                       Compilation Failed
                     </h3>
                   </div>
@@ -535,46 +881,119 @@ const PDFPreview = ({
                     className="text-red-400 hover:text-red-600 transition-colors p-2 rounded-full hover:bg-red-100"
                     title="Close error overlay"
                   >
-                    <XMarkIcon className="w-5 h-5" />
+                    <XMarkIcon className="w-4 h-4" />
                   </button>
                 </div>
                 
-                {/* Mobile Error Content */}
-                <div className="p-6 max-h-80 overflow-y-auto">
-                  <div className="text-sm text-red-600 mb-4">
-                    {compileErrors.length} error{compileErrors.length !== 1 ? 's' : ''} found:
+                {/* Mobile Error Summary */}
+                <div className="px-4 py-3 bg-red-25 border-b border-red-100">
+                  <div className="text-sm text-red-600 mb-2">
+                    {compileErrors.length} error{compileErrors.length !== 1 ? 's' : ''} found
                   </div>
-                  <div className="space-y-4">
-                    {compileErrors.map((error, index) => (
-                      <div key={index} className="bg-red-50 border border-red-200 rounded-lg p-4">
-                        <div className="flex items-start space-x-3">
-                          <div className="flex-shrink-0 w-6 h-6 bg-red-100 rounded-full flex items-center justify-center mt-0.5">
-                            <span className="text-red-700 text-sm font-medium">{index + 1}</span>
-                          </div>
+                  <div className="flex flex-wrap gap-1">
+                    {categorizeErrors(compileErrors).critical.length > 0 && (
+                      <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs">
+                        {categorizeErrors(compileErrors).critical.length} Critical
+                      </span>
+                    )}
+                    {categorizeErrors(compileErrors).syntax.length > 0 && (
+                      <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-xs">
+                        {categorizeErrors(compileErrors).syntax.length} Syntax
+                      </span>
+                    )}
+                    {categorizeErrors(compileErrors).missing.length > 0 && (
+                      <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs">
+                        {categorizeErrors(compileErrors).missing.length} Missing
+                      </span>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Mobile Error Content - Scrollable List */}
+                <div className="flex-1 overflow-y-auto">
+                  <div className="p-4 space-y-4">
+                    {compileErrors.slice(0, 10).map((error, index) => (
+                      <div key={index} className="bg-red-50 border border-red-200 rounded-lg p-3">
+                        <div className="flex items-start space-x-2 mb-2">
+                          {getErrorIcon(error.type)}
                           <div className="flex-1 min-w-0">
-                            <pre className="text-sm text-red-800 font-mono whitespace-pre-wrap break-words">
-                              {error}
+                            <div className="text-sm font-medium text-red-800 mb-1">
+                              {error.type === 'latex_error' ? 'LaTeX Error' :
+                               error.type === 'syntax' ? 'Syntax Error' :
+                               error.type === 'missing_file' ? 'Missing File' :
+                               error.type === 'package_error' ? 'Package Error' :
+                               error.type === 'undefined_command' ? 'Undefined Command' :
+                               error.type === 'math_mode' ? 'Math Mode Error' :
+                               error.type === 'compilation_error' ? 'Compilation Error' :
+                               error.type === 'pdf_error' ? 'PDF Error' :
+                               error.type === 'undefined_environment' ? 'Undefined Environment' :
+                               'Compilation Error'}
+                            </div>
+                            {error.line && (
+                              <div className="text-xs text-red-600 mb-2">
+                                Line {error.line} {error.file && error.file !== 'main.tex' ? `in ${error.file}` : ''}
+                              </div>
+                            )}
+                            <pre className="text-sm text-red-800 font-mono whitespace-pre-wrap break-words mb-2">
+                              {safeRender(error.message)}
                             </pre>
+                            
+                            {/* Code Context for Mobile */}
+                            {error.context && error.context.lines && (
+                              <div className="bg-gray-900 rounded p-2 mt-2 text-xs">
+                                <div className="text-gray-400 mb-1 font-mono">
+                                  {safeRender(error.file) || 'main.tex'} (around line {safeRender((error.context.startLine || 0) + (error.context.errorLineIndex || 0))})
+                                </div>
+                                <pre className="font-mono overflow-x-auto">
+                                  {error.context.lines.map((line, idx) => (
+                                    <div
+                                      key={idx}
+                                      className={`${
+                                        idx === error.context.errorLineIndex
+                                          ? 'bg-red-900 bg-opacity-50 text-red-200'
+                                          : 'text-gray-300'
+                                      } py-0.5 px-1 ${idx === error.context.errorLineIndex ? 'border-l-2 border-red-500' : ''}`}
+                                    >
+                                      <span className="text-gray-500 mr-2 select-none">
+                                        {((error.context.startLine || 0) + idx).toString().padStart(2)}
+                                      </span>
+                                      {safeRender(line) || ' '}
+                                    </div>
+                                  ))}
+                                </pre>
+                              </div>
+                            )}
+                            
+                            {error.suggestion && (
+                              <div className="bg-blue-50 border border-blue-200 rounded p-2 mt-2">
+                                <div className="flex items-start space-x-1">
+                                  <LightBulbIcon className="w-3 h-3 text-blue-500 flex-shrink-0 mt-0.5" />
+                                  <p className="text-xs text-blue-700">
+                                    {safeRender(error.suggestion)}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
                     ))}
-                  </div>
-                  
-                  {/* Mobile Help Text */}
-                  <div className="mt-6 pt-4 border-t border-red-200">
-                    <p className="text-sm text-gray-600">
-                      <strong>Tip:</strong> Fix the errors in your LaTeX code and try compiling again. 
-                      Common issues include missing packages, unclosed braces, or syntax errors.
-                    </p>
+                    
+                    {compileErrors.length > 10 && (
+                      <div className="text-center py-2">
+                        <span className="text-sm text-gray-500">
+                          ... and {compileErrors.length - 10} more errors
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
                 
                 {/* Mobile Footer */}
-                <div className="bg-gray-50 border-t border-gray-200 px-6 py-4 flex justify-end">
+                <div className="bg-gray-50 border-t border-gray-200 px-4 py-3 flex justify-end">
                   <button
                     onClick={() => setShowErrorOverlay(false)}
-                    className="px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium rounded-lg transition-colors"
+                    className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium rounded-lg transition-colors"
                   >
                     Close
                   </button>
@@ -587,7 +1006,7 @@ const PDFPreview = ({
     );
   }
 
-  // DESKTOP LAYOUT (unchanged from original)
+  // DESKTOP LAYOUT
   return (
     <div className="bg-white border-l border-gray-300 flex flex-col relative" style={{ width: `${editorWidth}%` }}>
       {/* Header with controls */}
@@ -656,14 +1075,18 @@ const PDFPreview = ({
           </div>
           
           <div className="flex items-center space-x-3">
-            {/* Error indicator in header */}
+            {/* Enhanced Error indicator in header */}
             {compileErrors && compileErrors.length > 0 && (
-              <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setShowErrorOverlay(true)}
+                className="flex items-center space-x-2 px-2 py-1 bg-red-100 hover:bg-red-200 rounded-md transition-colors"
+                title="Click to view detailed errors"
+              >
                 <ExclamationTriangleIcon className="w-4 h-4 text-red-500" />
                 <span className="text-xs text-red-600 font-medium">
                   {compileErrors.length} error{compileErrors.length !== 1 ? 's' : ''}
                 </span>
-              </div>
+              </button>
             )}
             
             {/* Zoom Controls */}
@@ -770,65 +1193,16 @@ const PDFPreview = ({
           </div>
         )}
 
-        {/* Translucent Error Overlay */}
+        {/* Enhanced Desktop Error Overlay */}
         {showErrorOverlay && compileErrors && compileErrors.length > 0 && (
           <div className="absolute inset-0 bg-black bg-opacity-20 flex items-center justify-center p-4 z-10">
-            <div className="bg-white bg-opacity-95 backdrop-blur-sm rounded-lg shadow-xl border border-red-200 max-w-2xl w-full max-h-[80%] overflow-hidden">
-              {/* Error Header */}
-              <div className="bg-red-50 border-b border-red-200 px-4 py-3 flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <ExclamationTriangleIcon className="w-5 h-5 text-red-500" />
-                  <h3 className="text-sm font-semibold text-red-800">
-                    Compilation Failed ({compileErrors.length} error{compileErrors.length !== 1 ? 's' : ''})
-                  </h3>
-                </div>
-                <button
-                  onClick={() => setShowErrorOverlay(false)}
-                  className="text-red-400 hover:text-red-600 transition-colors p-1 rounded hover:bg-red-100"
-                  title="Close error overlay"
-                >
-                  <XMarkIcon className="w-4 h-4" />
-                </button>
-              </div>
-              
-              {/* Error Content */}
-              <div className="p-4 max-h-96 overflow-y-auto">
-                <div className="space-y-3">
-                  {compileErrors.map((error, index) => (
-                    <div key={index} className="bg-red-50 border border-red-200 rounded-md p-3">
-                      <div className="flex items-start space-x-2">
-                        <div className="flex-shrink-0 w-5 h-5 bg-red-100 rounded-full flex items-center justify-center mt-0.5">
-                          <span className="text-red-700 text-xs font-medium">{index + 1}</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <pre className="text-sm text-red-800 font-mono whitespace-pre-wrap break-words">
-                            {error}
-                          </pre>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                
-                {/* Help Text */}
-                <div className="mt-4 pt-4 border-t border-red-200">
-                  <p className="text-xs text-gray-600">
-                    <strong>Tip:</strong> Fix the errors in your LaTeX code and try compiling again. 
-                    Common issues include missing packages, unclosed braces, or syntax errors.
-                  </p>
-                </div>
-              </div>
-              
-              {/* Footer */}
-              <div className="bg-gray-50 border-t border-gray-200 px-4 py-3 flex justify-end">
-                <button
-                  onClick={() => setShowErrorOverlay(false)}
-                  className="px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium rounded transition-colors"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
+            <ErrorOverlayContent
+              errors={compileErrors}
+              selectedIndex={selectedErrorIndex}
+              onSelectError={setSelectedErrorIndex}
+              onClose={() => setShowErrorOverlay(false)}
+              isMobile={false}
+            />
           </div>
         )}
       </div>

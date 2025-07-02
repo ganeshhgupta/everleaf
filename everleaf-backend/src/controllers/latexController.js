@@ -18,7 +18,14 @@ const compileLatex = async (req, res) => {
     if (!files || !files['main.tex']) {
       return res.status(400).json({
         success: false,
-        errors: ['main.tex file is required']
+        errors: [{ 
+          type: 'validation',
+          message: 'main.tex file is required',
+          line: null,
+          file: 'main.tex',
+          context: null,
+          suggestion: 'Make sure your main LaTeX file is named "main.tex"'
+        }]
       });
     }
     
@@ -51,6 +58,7 @@ const compileLatex = async (req, res) => {
     let compilationSuccess = false;
     let stdout = '';
     let stderr = '';
+    let finalExitCode = 0;
     
     if (needsMultiplePasses) {
       console.log(`📚 Complex document detected, running multiple compilation passes`);
@@ -62,16 +70,18 @@ const compileLatex = async (req, res) => {
         console.log(`🔄 Running compilation pass ${i + 1}/${passes.length}`);
         
         const result = await runDirectLatexCompilation(workDir, passes[i]);
-        stdout += result.stdout;
-        stderr += result.stderr;
+        stdout += `\n=== PASS ${i + 1} OUTPUT ===\n` + result.stdout;
+        stderr += `\n=== PASS ${i + 1} STDERR ===\n` + result.stderr;
         
         if (result.code !== 0 && i === 0) {
           // If first pass fails completely, break
+          finalExitCode = result.code;
           break;
         }
         
         if (i === passes.length - 1) {
           compilationSuccess = result.code === 0;
+          finalExitCode = result.code;
         }
       }
     } else {
@@ -80,6 +90,7 @@ const compileLatex = async (req, res) => {
       stdout = result.stdout;
       stderr = result.stderr;
       compilationSuccess = result.code === 0;
+      finalExitCode = result.code;
     }
     
     // Check if PDF was generated successfully
@@ -100,29 +111,47 @@ const compileLatex = async (req, res) => {
       
     } else {
       console.log(`❌ PDF generation failed`);
+      console.log(`📋 Exit code: ${finalExitCode}`);
       console.log(`📋 Stdout:`, stdout.substring(0, 1000));
       console.log(`📋 Stderr:`, stderr.substring(0, 1000));
       
-      // Parse errors from log or stdout/stderr
+      // Parse errors from log file AND stdout with improved parsing
       const logPath = path.join(workDir, 'main.log');
       let logContent = '';
       
       try {
         logContent = await fs.readFile(logPath, 'utf8');
       } catch (e) {
-        logContent = stderr || stdout || 'No compilation output';
+        logContent = stderr || stdout || 'No compilation output available';
       }
       
-      const errors = parseLatexErrors(logContent);
-      console.log(`🐛 Parsed errors:`, errors);
+      // Add debug logging before parsing
+      console.log('=== DEBUG: RAW LOG CONTENT ===');
+      console.log('Log file exists:', !!logContent);
+      console.log('Log content length:', logContent.length);
+      console.log('First 500 chars of log:', logContent.substring(0, 500));
+      console.log('Last 500 chars of log:', logContent.substring(Math.max(0, logContent.length - 500)));
+      
+      console.log('=== DEBUG: STDOUT CONTENT ===');
+      console.log('Stdout length:', stdout.length);
+      console.log('Stdout content:', stdout.substring(0, 1000));
+      
+      console.log('=== DEBUG: STDERR CONTENT ===');
+      console.log('Stderr length:', stderr.length);
+      console.log('Stderr content:', stderr.substring(0, 1000));
+
+      // Improved error parsing that handles actual LaTeX log format
+      const parsedErrors = parseLatexErrorsImproved(logContent, stdout, stderr, files);
+      console.log(`🐛 Parsed ${parsedErrors.length} errors:`, JSON.stringify(parsedErrors, null, 2));
       
       res.status(400).json({
         success: false,
-        errors: errors,
-        logs: logContent.substring(0, 5000),
-        stdout: stdout.substring(0, 2000),
-        stderr: stderr.substring(0, 2000),
-        suggestions: getCompilationSuggestions(mainTexContent)
+        errors: parsedErrors,
+        logs: logContent.substring(0, 8000), // Increased log size
+        stdout: stdout.substring(0, 3000),   // Increased stdout size
+        stderr: stderr.substring(0, 3000),   // Increased stderr size
+        exitCode: finalExitCode,
+        suggestions: getCompilationSuggestions(mainTexContent, parsedErrors)
       });
     }
     
@@ -133,14 +162,28 @@ const compileLatex = async (req, res) => {
       return res.status(408).json({
         success: false,
         message: 'Compilation timeout',
-        errors: ['Compilation timed out after 60 seconds']
+        errors: [{
+          type: 'timeout',
+          message: 'Compilation timed out after 60 seconds',
+          line: null,
+          file: null,
+          context: null,
+          suggestion: 'Your document may be too complex or have infinite loops. Try simplifying it.'
+        }]
       });
     }
     
     res.status(500).json({
       success: false,
       message: 'Internal server error during compilation',
-      errors: [error.message]
+      errors: [{
+        type: 'system',
+        message: error.message,
+        line: null,
+        file: null,
+        context: null,
+        suggestion: 'This appears to be a server error. Please try again.'
+      }]
     });
     
   } finally {
@@ -187,7 +230,14 @@ const compileLatexCloud = async (req, res) => {
     
     return res.status(400).json({
       success: false,
-      errors: ['main.tex file is required for cloud compilation']
+      errors: [{
+        type: 'validation',
+        message: 'main.tex file is required for cloud compilation',
+        line: null,
+        file: 'main.tex',
+        context: null,
+        suggestion: 'Make sure your main LaTeX file is named "main.tex"'
+      }]
     });
     
   } catch (error) {
@@ -195,16 +245,26 @@ const compileLatexCloud = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Cloud compilation fallback failed',
-      errors: [error.message]
+      errors: [{
+        type: 'system',
+        message: error.message,
+        line: null,
+        file: null,
+        context: null,
+        suggestion: 'Cloud compilation failed. Please try again.'
+      }]
     });
   }
 };
 
-// Run direct LaTeX compilation (no Docker)
+// Run direct LaTeX compilation with BOTH approaches for better error reporting
 const runDirectLatexCompilation = async (workDir, command = 'pdflatex') => {
+  // Use standard mode (without -file-line-error) for better error messages
+  // The standard format provides more complete error information
   const args = [
     '-interaction=nonstopmode',
     '-halt-on-error',
+    // Note: Removed '-file-line-error' as it can truncate error messages
     '-output-directory', workDir,
     'main.tex'
   ];
@@ -249,6 +309,311 @@ const runDirectLatexCompilation = async (workDir, command = 'pdflatex') => {
       reject(error);
     });
   });
+};
+
+// IMPROVED ERROR PARSING - Handles actual LaTeX log format
+const parseLatexErrorsImproved = (logContent, stdout, stderr, files = {}) => {
+  console.log('🚀 === STARTING ERROR PARSING DEBUG ===');
+  console.log('Input lengths - log:', logContent.length, 'stdout:', stdout.length, 'stderr:', stderr.length);
+  
+  const errors = [];
+  const lines = logContent.split('\n');
+  const fileLines = {};
+  
+  // Pre-process file contents for line context  
+  Object.entries(files).forEach(([filename, content]) => {
+    fileLines[filename] = content.split('\n');
+    console.log(`📁 Processed file ${filename} with ${fileLines[filename].length} lines`);
+  });
+  
+  let currentFile = 'main.tex';
+  let i = 0;
+  
+  console.log('🔍 Starting improved error parsing...');
+  console.log(`📄 Processing ${lines.length} lines of log output`);
+  
+  // Simple fallback: look for any lines that contain obvious error indicators
+  const errorIndicators = [
+    '! ',
+    'Error:',
+    'error:',
+    'ERROR:',
+    'Fatal error',
+    'failed',
+    'not found',
+    'undefined',
+    'Undefined'
+  ];
+  
+  lines.forEach((line, index) => {
+    const trimmedLine = line.trim();
+    
+    // Check if this line contains any error indicators
+    const hasErrorIndicator = errorIndicators.some(indicator => 
+      trimmedLine.includes(indicator)
+    );
+    
+    if (hasErrorIndicator) {
+      console.log(`🚨 FOUND POTENTIAL ERROR at line ${index + 1}: "${trimmedLine}"`);
+      
+      // Simple error extraction
+      let errorMessage = trimmedLine;
+      let lineNumber = null;
+      
+      // Try to extract line number from various patterns
+      const linePatterns = [
+        /l\.(\d+)/,           // l.123
+        /line (\d+)/i,        // line 123
+        /:(\d+):/,            // file:123:
+        /at line (\d+)/i      // at line 123
+      ];
+      
+      for (const pattern of linePatterns) {
+        const match = trimmedLine.match(pattern);
+        if (match) {
+          lineNumber = parseInt(match[1]);
+          console.log(`📍 Extracted line number: ${lineNumber}`);
+          break;
+        }
+      }
+      
+      // Create simple error object
+      const simpleError = {
+        type: determineErrorTypeSimple(errorMessage),
+        message: errorMessage,
+        line: lineNumber,
+        file: currentFile,
+        context: lineNumber ? getLineContext(fileLines[currentFile] || [], lineNumber - 1) : null,
+        suggestion: getSuggestionForError(errorMessage, null),
+        rawLine: trimmedLine,
+        sourceLineIndex: index + 1
+      };
+      
+      errors.push(simpleError);
+      console.log(`✅ Added simple error:`, JSON.stringify(simpleError, null, 2));
+    }
+  });
+  
+  // If still no errors, add lines containing common LaTeX error terms
+  if (errors.length === 0) {
+    console.log('⚠️ No obvious errors found, looking for LaTeX-specific terms...');
+    
+    const latexTerms = ['LaTeX', 'TeX', 'pdflatex', 'compilation'];
+    const relevantLines = lines.filter(line => {
+      const lowerLine = line.toLowerCase();
+      return latexTerms.some(term => lowerLine.includes(term.toLowerCase())) ||
+             line.trim().startsWith('!') ||
+             line.includes('error') ||
+             line.includes('Error');
+    });
+    
+    console.log(`📋 Found ${relevantLines.length} potentially relevant lines:`);
+    relevantLines.forEach((line, idx) => {
+      console.log(`   ${idx + 1}: ${line.trim()}`);
+    });
+    
+    if (relevantLines.length > 0) {
+      errors.push({
+        type: 'unknown',
+        message: `Compilation failed. Relevant output: ${relevantLines.slice(0, 3).join(' | ')}`,
+        line: null,
+        file: 'main.tex',
+        context: null,
+        suggestion: 'Check the console output for more details about the compilation failure.',
+        rawLine: relevantLines[0],
+        allRelevantLines: relevantLines
+      });
+    }
+  }
+  
+  // Also check stderr for system errors
+  if (stderr && stderr.trim().length > 0) {
+    console.log('🔍 Checking stderr for additional errors...');
+    console.log('Stderr content:', stderr);
+    
+    const stderrLines = stderr.split('\n').filter(line => line.trim().length > 0);
+    stderrLines.forEach(line => {
+      if (line.includes('command not found') || 
+          line.includes('No such file') || 
+          line.includes('error') ||
+          line.includes('Error')) {
+        
+        console.log(`🚨 Found stderr error: ${line}`);
+        errors.push({
+          type: 'system_error',
+          message: `System error: ${line.trim()}`,
+          line: null,
+          file: null,
+          context: null,
+          suggestion: 'This appears to be a system error. Check if LaTeX is properly installed.',
+          rawLine: line,
+          source: 'stderr'
+        });
+      }
+    });
+  }
+  
+  // Final fallback - if absolutely no errors found
+  if (errors.length === 0) {
+    console.log('❌ NO ERRORS DETECTED - Adding generic fallback error');
+    
+    const lastLines = lines.slice(-10).filter(line => line.trim().length > 0);
+    console.log('Last non-empty lines:', lastLines);
+    
+    errors.push({
+      type: 'unknown',
+      message: 'Compilation failed but no specific errors were detected in the log output.',
+      line: null,
+      file: 'main.tex',
+      context: null,
+      suggestion: 'Check your LaTeX syntax. The compilation process exited with an error but no clear cause was identified.',
+      rawLine: 'No specific error line found',
+      debugInfo: {
+        logLength: logContent.length,
+        stdoutLength: stdout.length,
+        stderrLength: stderr.length,
+        lastLogLines: lastLines,
+        hasLogContent: !!logContent,
+        hasStdout: !!stdout,
+        hasStderr: !!stderr
+      }
+    });
+  }
+  
+  console.log(`🎯 FINAL RESULT: Found ${errors.length} errors`);
+  errors.forEach((error, idx) => {
+    console.log(`Error ${idx + 1}:`, {
+      type: error.type,
+      message: error.message.substring(0, 100) + (error.message.length > 100 ? '...' : ''),
+      line: error.line,
+      file: error.file
+    });
+  });
+  
+  console.log('🏁 === ENDING ERROR PARSING DEBUG ===');
+  
+  // Remove duplicates and limit
+  const uniqueErrors = errors.filter((error, index, arr) => 
+    arr.findIndex(e => e.message === error.message && e.line === error.line) === index
+  );
+  
+  return uniqueErrors.slice(0, 20);
+};
+
+// Simple error type determination for debugging
+const determineErrorTypeSimple = (errorMessage) => {
+  const msg = errorMessage.toLowerCase();
+  
+  if (msg.includes('latex error:') || msg.includes('! latex error')) {
+    return 'latex_error';
+  }
+  if (msg.includes('undefined control sequence') || msg.includes('undefined')) {
+    return 'undefined_command';
+  }
+  if (msg.includes('missing $ inserted') || msg.includes('extra }') || msg.includes('math')) {
+    return 'math_mode';
+  }
+  if (msg.includes('package') && msg.includes('error')) {
+    return 'package_error';
+  }
+  if (msg.includes('environment') && msg.includes('undefined')) {
+    return 'undefined_environment';
+  }
+  if (msg.includes('file') && (msg.includes('not found') || msg.includes('missing'))) {
+    return 'missing_file';
+  }
+  if (msg.includes('runaway argument') || msg.includes('paragraph ended')) {
+    return 'syntax';
+  }
+  if (msg.includes('command not found') || msg.includes('system')) {
+    return 'system_error';
+  }
+  
+  return 'compilation_error';
+};
+
+// Determine error type from error message content
+const determineErrorType = (errorMessage) => {
+  const msg = errorMessage.toLowerCase();
+  
+  if (msg.includes('latex error:')) {
+    return 'latex_error';
+  }
+  if (msg.includes('undefined control sequence')) {
+    return 'undefined_command';
+  }
+  if (msg.includes('missing $ inserted') || msg.includes('extra }')) {
+    return 'math_mode';
+  }
+  if (msg.includes('package') && msg.includes('error')) {
+    return 'package_error';
+  }
+  if (msg.includes('environment') && msg.includes('undefined')) {
+    return 'undefined_environment';
+  }
+  if (msg.includes('file') && msg.includes('not found')) {
+    return 'missing_file';
+  }
+  if (msg.includes('runaway argument') || msg.includes('paragraph ended')) {
+    return 'syntax';
+  }
+  
+  return 'compilation_error';
+};
+
+// Get line context around an error
+const getLineContext = (fileLines, lineIndex) => {
+  if (!fileLines || lineIndex < 0 || lineIndex >= fileLines.length) {
+    return null;
+  }
+  
+  const start = Math.max(0, lineIndex - 2);
+  const end = Math.min(fileLines.length, lineIndex + 3);
+  
+  return {
+    lines: fileLines.slice(start, end),
+    errorLineIndex: lineIndex - start,
+    startLine: start + 1
+  };
+};
+
+// Get specific suggestions based on error type and content
+const getSuggestionForError = (errorMsg, context) => {
+  const msg = errorMsg.toLowerCase();
+  
+  if (msg.includes('undefined control sequence')) {
+    return 'Check for typos in command names and ensure required packages are loaded.';
+  }
+  
+  if (msg.includes('missing $ inserted') || msg.includes('math mode')) {
+    return 'Wrap mathematical expressions in $ $ or use \\textunderscore for literal underscores.';
+  }
+  
+  if (msg.includes('environment') && msg.includes('undefined')) {
+    return 'Make sure you have loaded the package that defines this environment.';
+  }
+  
+  if (msg.includes('file not found') || msg.includes('cannot find')) {
+    return 'Check file paths and ensure all referenced files are uploaded.';
+  }
+  
+  if (msg.includes('runaway argument') || msg.includes('paragraph ended')) {
+    return 'Check for unmatched braces {} or missing closing brackets.';
+  }
+  
+  if (msg.includes('missing \\begin{document}')) {
+    return 'Make sure your document has \\begin{document} after the preamble.';
+  }
+  
+  if (msg.includes('unknown graphics extension')) {
+    return 'Use supported image formats: .png, .jpg, .pdf, .eps';
+  }
+  
+  if (msg.includes('extra }') || msg.includes('extra alignment tab')) {
+    return 'Check for extra closing braces } or misplaced & characters in tables.';
+  }
+  
+  return 'Check the syntax around this line and ensure all commands are properly formatted.';
 };
 
 // Test TexLive environment (no Docker)
@@ -388,13 +753,15 @@ const healthCheck = async (req, res) => {
     message: 'Direct TexLive controller is healthy',
     timestamp: new Date().toISOString(),
     compilation: 'Direct TexLive',
-    version: '5.0.0',
+    version: '5.1.0',
     features: [
       'Direct TexLive compilation',
       'Multi-pass compilation for complex documents',
       'Container-native execution',
-      'Comprehensive error parsing',
-      'Document complexity detection'
+      'Improved LaTeX log parsing with line numbers',
+      'Document complexity detection',
+      'Contextual error suggestions',
+      'Standard LaTeX error format parsing'
     ]
   });
 };
@@ -453,80 +820,61 @@ const simplifyDocumentForCompatibility = (content) => {
   return simplified;
 };
 
-const parseLatexErrors = (logContent) => {
-  const errors = [];
-  const lines = logContent.split('\n');
-  
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    
-    // LaTeX errors
-    if (line.startsWith('! ')) {
-      const errorMsg = line.substring(2);
-      errors.push(errorMsg);
-    }
-    
-    // Line number errors
-    if (line.match(/^l\.\d+/)) {
-      const lineMatch = line.match(/^l\.(\d+)\s+(.*)$/);
-      if (lineMatch) {
-        errors.push(`Line ${lineMatch[1]}: ${lineMatch[2]}`);
-      }
-    }
-    
-    // LaTeX Error messages
-    if (line.includes('! LaTeX Error:')) {
-      errors.push(line.replace('! LaTeX Error:', 'LaTeX Error:'));
-    }
-    
-    // Package errors
-    if (line.includes('! Package')) {
-      errors.push(line);
-    }
-    
-    // Missing file errors
-    if (line.includes('No such file or directory')) {
-      errors.push('Missing file: ' + line);
-    }
-  }
-  
-  if (errors.length === 0) {
-    errors.push('Compilation failed - check document syntax and packages');
-  }
-  
-  return errors.slice(0, 10); // Limit to 10 most relevant errors
-};
-
-// Get compilation suggestions based on document content
-const getCompilationSuggestions = (content) => {
+// Enhanced compilation suggestions based on document content and parsed errors
+const getCompilationSuggestions = (content, parsedErrors = []) => {
   const suggestions = [];
+  const errorTypes = parsedErrors.map(e => e.type);
   
-  if (content.includes('\\includegraphics')) {
-    suggestions.push('Make sure all referenced image files are uploaded');
+  // Specific suggestions based on errors
+  if (errorTypes.includes('missing_file')) {
+    suggestions.push('📁 Upload all referenced files (images, .bib files, etc.)');
+  }
+  
+  if (errorTypes.includes('package_error')) {
+    suggestions.push('📦 Check package names and options - some packages may not be available');
+  }
+  
+  if (errorTypes.includes('undefined_command')) {
+    suggestions.push('🔧 Verify command spelling and ensure required packages are loaded');
+  }
+  
+  if (errorTypes.includes('math_mode')) {
+    suggestions.push('🧮 Check math expressions - use $ $ for inline math and $$ $$ for display math');
+  }
+  
+  if (errorTypes.includes('syntax')) {
+    suggestions.push('🔍 Check for unmatched braces, brackets, or missing delimiters');
+  }
+  
+  // Content-based suggestions
+  if (content.includes('\\includegraphics') && !suggestions.some(s => s.includes('📁'))) {
+    suggestions.push('🖼️ Make sure all referenced image files are uploaded');
   }
   
   if (content.includes('\\cite{')) {
-    suggestions.push('Ensure bibliography files (.bib) are included');
+    suggestions.push('📚 Ensure bibliography files (.bib) are included');
   }
   
-  if (content.includes('\\usepackage')) {
-    suggestions.push('Some packages may not be available - try removing non-essential packages');
+  if (content.includes('\\usepackage') && !suggestions.some(s => s.includes('📦'))) {
+    suggestions.push('📦 Some packages may not be available - try removing non-essential packages');
   }
   
   if (content.includes('\\input{') || content.includes('\\include{')) {
-    suggestions.push('Make sure all referenced .tex files are uploaded');
+    suggestions.push('📄 Make sure all referenced .tex files are uploaded');
   }
   
   if (content.includes('\\newcommand')) {
-    suggestions.push('Check custom command definitions for syntax errors');
+    suggestions.push('⚙️ Check custom command definitions for syntax errors');
   }
   
+  // General suggestions if no specific ones
   if (suggestions.length === 0) {
-    suggestions.push('Check LaTeX syntax and ensure all referenced files are available');
-    suggestions.push('Try simplifying the document by removing complex packages');
+    suggestions.push('🔍 Check LaTeX syntax and ensure all referenced files are available');
+    suggestions.push('🧹 Try simplifying the document by removing complex packages');
+    suggestions.push('📖 Look at the error details for specific line numbers and suggestions');
   }
   
-  return suggestions;
+  return suggestions.slice(0, 6); // Limit to 6 most relevant suggestions
 };
 
 module.exports = {

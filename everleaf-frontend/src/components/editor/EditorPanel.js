@@ -28,6 +28,8 @@ const EditorPanel = forwardRef(({
   // Surgical editing props
   isProcessingSurgicalEdit,
   surgicalEditHistory,
+  // Control props
+  hideSurgicalEditsPanel = false,
   // NEW: Mobile-specific props (optional)
   isMobile,
   currentScreenMode
@@ -41,6 +43,33 @@ const EditorPanel = forwardRef(({
 \\begin{document}
 Hello World!
 \\end{document}`;
+
+  // SAFE ERROR RENDERING FUNCTION - Add this to handle complex error objects
+  const safeRenderError = (error) => {
+    // Handle different error formats safely
+    if (typeof error === 'string') {
+      return error;
+    }
+    if (error && typeof error === 'object') {
+      // Handle enhanced error objects from the new backend
+      if (error.message && error.line) {
+        return `Line ${error.line}: ${error.message}`;
+      }
+      if (error.message) {
+        return error.message;
+      }
+      if (error.type && error.suggestion) {
+        return `${error.type}: ${error.message || 'Unknown error'} (Suggestion: ${error.suggestion})`;
+      }
+      // Fallback for unknown object structure
+      try {
+        return JSON.stringify(error);
+      } catch (e) {
+        return '[Error object]';
+      }
+    }
+    return String(error || 'Unknown error');
+  };
 
   // EXPOSE: Inject text method to parent component
   useImperativeHandle(ref, () => ({
@@ -173,7 +202,8 @@ Hello World!
     console.log('EditorPanel - latexCode length:', latexCode?.length || 0);
     console.log('EditorPanel - activeFile:', activeFile?.name);
     console.log('EditorPanel - isProcessingSurgicalEdit:', isProcessingSurgicalEdit);
-  }, [latexCode, activeFile, isProcessingSurgicalEdit]);
+    console.log('EditorPanel - compileErrors:', compileErrors);
+  }, [latexCode, activeFile, isProcessingSurgicalEdit, compileErrors]);
 
   // Handle editor resize when layout changes
   useEffect(() => {
@@ -484,58 +514,21 @@ Hello World!
           )}
         </div>
 
-        {/* Mobile Compile Errors */}
-        {compileErrors.length > 0 && (
+        {/* FIXED: Mobile Compile Errors - Using safeRenderError */}
+        {compileErrors && compileErrors.length > 0 && (
           <div className="bg-red-50 border-t border-red-200 p-4 max-h-40 overflow-y-auto flex-shrink-0">
-            <h4 className="text-sm font-semibold text-red-800 mb-3">Compilation Errors:</h4>
+            <h4 className="text-sm font-semibold text-red-800 mb-3">Compilation Errors ({compileErrors.length}):</h4>
             <ul className="text-sm text-red-700 space-y-2">
               {compileErrors.map((error, index) => (
-                <li key={index} className="font-mono text-xs bg-red-100 p-2 rounded">
-                  • {error}
+                <li key={index} className="font-mono text-xs bg-red-100 p-2 rounded border-l-2 border-red-400">
+                  • {safeRenderError(error)}
                 </li>
               ))}
             </ul>
           </div>
         )}
 
-        {/* Mobile Surgical Edit History Panel */}
-        {surgicalEditHistory && surgicalEditHistory.length > 0 && !isProcessingSurgicalEdit && (
-          <div className="bg-gray-50 border-t border-gray-200 p-3 flex-shrink-0">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-700">Recent Surgical Edits</span>
-              <span className="text-xs text-gray-500">{surgicalEditHistory.length} total</span>
-            </div>
-            <div className="flex space-x-2 overflow-x-auto">
-              {surgicalEditHistory.slice(-3).map((edit, index) => (
-                <div 
-                  key={edit.id} 
-                  className={`flex-shrink-0 px-3 py-2 rounded-lg text-xs border ${
-                    edit.validation?.overallValid !== false
-                      ? 'bg-green-100 border-green-300 text-green-800'
-                      : 'bg-red-100 border-red-300 text-red-800'
-                  }`}
-                  title={`${edit.changes.action || 'Edit'}: ${edit.message}`}
-                >
-                  <div className="flex items-center space-x-2">
-                    {edit.validation?.overallValid !== false ? (
-                      <CheckCircleIcon className="w-4 h-4" />
-                    ) : (
-                      <ExclamationTriangleIcon className="w-4 h-4" />
-                    )}
-                    <div>
-                      <div className="font-medium">
-                        {edit.changes.action || 'Edit'}
-                      </div>
-                      <div className="text-xs opacity-75">
-                        {edit.changes.deltaLength > 0 ? '+' : ''}{edit.changes.deltaLength}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* REMOVED: Mobile Surgical Edit History Panel - NO LONGER RENDERED */}
 
         {/* Mobile CSS for surgical editing styles */}
         <style jsx>{`
@@ -565,7 +558,7 @@ Hello World!
     );
   }
 
-  // DESKTOP LAYOUT (unchanged from original)
+  // DESKTOP LAYOUT
   return (
     <div 
       className={`flex flex-col bg-white relative transition-all duration-200 ${
@@ -602,8 +595,8 @@ Hello World!
               </div>
             )}
             
-            {/* NEW: Surgical edit history indicator */}
-            {surgicalEditHistory && surgicalEditHistory.length > 0 && (
+            {/* NEW: Surgical edit history indicator - SIMPLIFIED */}
+            {surgicalEditHistory && surgicalEditHistory.length > 0 && !hideSurgicalEditsPanel && (
               <div className="flex items-center space-x-1 text-xs text-gray-500">
                 <ScissorsIcon className="w-3 h-3" />
                 <span>{surgicalEditHistory.length} edits</span>
@@ -692,6 +685,7 @@ Hello World!
             <div>Content: {latexCode?.length || 0}</div>
             <div>Selected: {selectedText?.length || 0}</div>
             <div>Editor Ready: {editorRef.current ? '✅' : '❌'}</div>
+            <div>Errors: {compileErrors?.length || 0}</div>
             {isResizing && <div className="text-yellow-300">Resizing...</div>}
             {/* NEW: Surgical editing debug info */}
             {isProcessingSurgicalEdit && (
@@ -706,54 +700,21 @@ Hello World!
         )}
       </div>
 
-      {/* Compile Errors */}
-      {compileErrors.length > 0 && (
+      {/* FIXED: Desktop Compile Errors - Using safeRenderError */}
+      {compileErrors && compileErrors.length > 0 && (
         <div className="bg-red-50 border-t border-red-200 p-3 max-h-32 overflow-y-auto">
-          <h4 className="text-sm font-medium text-red-800 mb-2">Compilation Errors:</h4>
+          <h4 className="text-sm font-medium text-red-800 mb-2">Compilation Errors ({compileErrors.length}):</h4>
           <ul className="text-sm text-red-700 space-y-1">
             {compileErrors.map((error, index) => (
-              <li key={index} className="font-mono text-xs">• {error}</li>
+              <li key={index} className="font-mono text-xs bg-red-100 p-1 rounded border-l-2 border-red-400">
+                • {safeRenderError(error)}
+              </li>
             ))}
           </ul>
         </div>
       )}
 
-      {/* NEW: Surgical Edit History Panel (bottom) */}
-      {surgicalEditHistory && surgicalEditHistory.length > 0 && !isProcessingSurgicalEdit && (
-        <div className="bg-gray-50 border-t border-gray-200 p-2">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-medium text-gray-700">Recent Surgical Edits</span>
-            <span className="text-xs text-gray-500">{surgicalEditHistory.length} total</span>
-          </div>
-          <div className="flex space-x-2 overflow-x-auto">
-            {surgicalEditHistory.slice(-5).map((edit, index) => (
-              <div 
-                key={edit.id} 
-                className={`flex-shrink-0 px-2 py-1 rounded text-xs border ${
-                  edit.validation?.overallValid !== false
-                    ? 'bg-green-100 border-green-300 text-green-800'
-                    : 'bg-red-100 border-red-300 text-red-800'
-                }`}
-                title={`${edit.changes.action || 'Edit'}: ${edit.message}`}
-              >
-                <div className="flex items-center space-x-1">
-                  {edit.validation?.overallValid !== false ? (
-                    <CheckCircleIcon className="w-3 h-3" />
-                  ) : (
-                    <ExclamationTriangleIcon className="w-3 h-3" />
-                  )}
-                  <span className="font-medium">
-                    {edit.changes.action || 'Edit'}
-                  </span>
-                  <span className="text-xs opacity-75">
-                    {edit.changes.deltaLength > 0 ? '+' : ''}{edit.changes.deltaLength}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* REMOVED: Desktop Surgical Edit History Panel - NO LONGER RENDERED */}
 
       {/* NEW: Add CSS for surgical editing styles */}
       <style jsx>{`

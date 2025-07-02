@@ -1,6 +1,6 @@
-// LaTeXEditor.js - MOBILE-RESPONSIVE VERSION
+// LaTeXEditor.js - MOBILE-RESPONSIVE VERSION WITH HEADER FIX
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import Toolbar from './Toolbar';
@@ -54,89 +54,140 @@ const LaTeXEditor = () => {
   const [surgicalEditHistory, setSurgicalEditHistory] = useState([]);
   const [collaborators, setCollaborators] = useState([]);
 
-  // NEW: Mobile-specific state management
+  // NEW: Mobile-specific state management with initialization tracking
   const [isMobile, setIsMobile] = useState(false);
+  const [hasInitializedMobile, setHasInitializedMobile] = useState(false);
   const [currentScreenMode, setCurrentScreenMode] = useState('editor'); // 'editor', 'preview', 'files', 'chat'
   const [mobileLeftPanelOpen, setMobileLeftPanelOpen] = useState(false);
   const [mobileChatPanelOpen, setMobileChatPanelOpen] = useState(false);
   const [mobilePreviewMode, setMobilePreviewMode] = useState(false);
+  const [showSurgicalEditsFloat, setShowSurgicalEditsFloat] = useState(true);
 
   const containerRef = useRef(null);
   const dragStartRef = useRef(null);
 
   const GROQ_SERVER_URL = process.env.REACT_APP_FLASK_SERVER_URL || 'https://llm-server-production.up.railway.app';
 
-  // NEW: Mobile detection and responsive handling
-  useEffect(() => {
-    const checkMobile = () => {
-      const mobile = window.innerWidth < 768; // Tailwind's md breakpoint
-      setIsMobile(mobile);
-      
-      if (mobile) {
-        // On mobile, start with sidebar closed and chat collapsed
-        setSidebarOpen(false);
-        setIsChatCollapsed(true);
-        setCurrentScreenMode('editor');
-      } else {
-        // On desktop, restore normal behavior
-        setSidebarOpen(true);
-        setMobileLeftPanelOpen(false);
-        setMobileChatPanelOpen(false);
-        setMobilePreviewMode(false);
-      }
-    };
-
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    
-    return () => window.removeEventListener('resize', checkMobile);
+  // FIXED: Mobile detection with proper state management to prevent header disappearing
+  const checkIsMobile = useCallback(() => {
+    return window.innerWidth < 768; // Tailwind's md breakpoint
   }, []);
 
+  // Initialize mobile state only once
+  useEffect(() => {
+    const mobile = checkIsMobile();
+    setIsMobile(mobile);
+    
+    // Set initial states based on mobile detection
+    if (mobile) {
+      setSidebarOpen(false);
+      setIsChatCollapsed(true);
+      setCurrentScreenMode('editor');
+      setMobileLeftPanelOpen(false);
+      setMobileChatPanelOpen(false);
+      setMobilePreviewMode(false);
+    } else {
+      setSidebarOpen(true);
+      setIsChatCollapsed(true); // Keep chat collapsed by default on desktop too
+      setMobileLeftPanelOpen(false);
+      setMobileChatPanelOpen(false);
+      setMobilePreviewMode(false);
+    }
+    
+    setHasInitializedMobile(true);
+  }, []); // Empty dependency array - only run once on mount
+
+  // Handle window resize - only update mobile state, don't reset UI states
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = checkIsMobile();
+      
+      // Only update isMobile state if it actually changed
+      setIsMobile(prevMobile => {
+        if (prevMobile !== mobile) {
+          console.log(`📱 Mobile state changed: ${prevMobile} -> ${mobile}`);
+          
+          // Only adjust layout if we're switching between mobile/desktop
+          if (mobile) {
+            // Switching to mobile - close desktop panels
+            setSidebarOpen(false);
+            setCurrentScreenMode('editor');
+            // Close any open mobile panels
+            setMobileLeftPanelOpen(false);
+            setMobileChatPanelOpen(false);
+            setMobilePreviewMode(false);
+          } else {
+            // Switching to desktop - restore desktop layout
+            setSidebarOpen(true);
+            // Close mobile panels
+            setMobileLeftPanelOpen(false);
+            setMobileChatPanelOpen(false);
+            setMobilePreviewMode(false);
+          }
+        }
+        return mobile;
+      });
+    };
+
+    // Only add resize listener after initial mobile state is set
+    if (hasInitializedMobile) {
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+    }
+  }, [hasInitializedMobile, checkIsMobile]);
+
   // NEW: Mobile panel handlers
-  const handleMobileHamburgerToggle = () => {
+  const handleMobileHamburgerToggle = useCallback(() => {
     if (isMobile) {
-      setMobileLeftPanelOpen(!mobileLeftPanelOpen);
-      setCurrentScreenMode(mobileLeftPanelOpen ? 'editor' : 'files');
+      setMobileLeftPanelOpen(prev => {
+        const newState = !prev;
+        setCurrentScreenMode(newState ? 'files' : 'editor');
+        return newState;
+      });
     } else {
-      setSidebarOpen(!sidebarOpen);
+      setSidebarOpen(prev => !prev);
     }
-  };
+  }, [isMobile]);
 
-  const handleMobileChatToggle = () => {
+  const handleMobileChatToggle = useCallback(() => {
     if (isMobile) {
-      setMobileChatPanelOpen(!mobileChatPanelOpen);
-      setCurrentScreenMode(mobileChatPanelOpen ? 'editor' : 'chat');
+      setMobileChatPanelOpen(prev => {
+        const newState = !prev;
+        setCurrentScreenMode(newState ? 'chat' : 'editor');
+        return newState;
+      });
     } else {
-      setIsChatCollapsed(!isChatCollapsed);
+      setIsChatCollapsed(prev => !prev);
     }
-  };
+  }, [isMobile]);
 
-  const handleMobilePreviewToggle = () => {
+  const handleMobilePreviewToggle = useCallback(() => {
     if (isMobile) {
-      setMobilePreviewMode(!mobilePreviewMode);
-      setCurrentScreenMode(mobilePreviewMode ? 'editor' : 'preview');
+      setMobilePreviewMode(prev => {
+        const newState = !prev;
+        setCurrentScreenMode(newState ? 'preview' : 'editor');
+        return newState;
+      });
     }
-  };
+  }, [isMobile]);
 
-  const handleMobileBackToEditor = () => {
+  const handleMobileBackToEditor = useCallback(() => {
     setCurrentScreenMode('editor');
     setMobileLeftPanelOpen(false);
     setMobileChatPanelOpen(false);
     setMobilePreviewMode(false);
-  };
+  }, []);
 
   // Update existing toggle functions for mobile compatibility
-  const handleToggleChat = () => {
+  const handleToggleChat = useCallback(() => {
     if (isMobile) {
       handleMobileChatToggle();
     } else {
       console.log('Toggling chat panel from', isChatCollapsed, 'to', !isChatCollapsed);
-      setIsChatCollapsed(!isChatCollapsed);
+      setIsChatCollapsed(prev => !prev);
     }
-  };
+  }, [isMobile, handleMobileChatToggle, isChatCollapsed]);
 
-  // [Keep all existing functions unchanged - just showing key ones here for brevity]
-  
   // Initialize surgical editing service
   useEffect(() => {
     const llmClient = async (prompt) => {
@@ -167,8 +218,8 @@ const LaTeXEditor = () => {
     setSurgicalEditingService(service);
   }, [projectId, ragMode, documents]);
 
-  // Calculate layout widths for desktop
-  const getLayoutWidths = useCallback(() => {
+  // Calculate layout widths for desktop - memoized to prevent unnecessary recalculations
+  const getLayoutWidths = useMemo(() => {
     if (isMobile) {
       return { editor: 100, chat: 0, preview: 0 };
     }
@@ -252,8 +303,8 @@ const LaTeXEditor = () => {
     document.body.style.pointerEvents = 'none';
   }, [editorWidth, chatWidth, isMobile]);
 
-  // Load project documents (unchanged)
-  const loadDocuments = async () => {
+  // Load project documents
+  const loadDocuments = useCallback(async () => {
     try {
       setDocumentsLoading(true);
       const response = await api.get(`/documents/${projectId}`);
@@ -267,10 +318,10 @@ const LaTeXEditor = () => {
     } finally {
       setDocumentsLoading(false);
     }
-  };
+  }, [api, projectId]);
 
-  // Load project data from API (unchanged)
-  const loadProject = async () => {
+  // Load project data from API
+  const loadProject = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -312,9 +363,9 @@ Hello Hello Hello :)
     } finally {
       setLoading(false);
     }
-  };
+  }, [api, projectId]);
 
-  // Initialize chat with welcome message (unchanged)
+  // Initialize chat with welcome message
   useEffect(() => {
     const completedDocs = documents.filter(doc => doc.processingStatus === 'completed').length;
     const processingDocs = documents.filter(doc => doc.processingStatus === 'processing').length;
@@ -322,33 +373,25 @@ Hello Hello Hello :)
     const ragStatus = completedDocs > 0 
       ? `\n\n🧠 **RAG Mode Active**: I can reference your ${completedDocs} processed document${completedDocs !== 1 ? 's' : ''} to provide contextual assistance.${processingDocs > 0 ? ` (${processingDocs} document${processingDocs !== 1 ? 's' : ''} still processing)` : ''}`
       : documents.length > 0 
-        ? `\n\n📄 Documents uploaded but still processing...`
-        : `\n\n📄 Upload PDFs to enable RAG-powered assistance with your reference materials!`;
+        ? `\n\nDocuments uploaded but still processing...`
+        : `\n\nUpload PDFs to enable RAG-powered assistance.`;
 
     setChatMessages([{
       id: Date.now(),
       role: 'assistant',
-      content: `👋 Hi! I'm your **Surgical LaTeX Assistant** powered by Groq AI. I can help you:
+      content: `Hi there! I'm your Everleaf AI Assistant. I can help you:
 
-• **Surgically edit** specific sections without affecting other content
-• Write and fix LaTeX code with precision
-• Explain LaTeX commands and improve document structure
-• Generate equations, tables, and figures${ragStatus}
-
-**New Surgical Editing Features:**
-• Select text → I'll improve only that part
-• Say "expand the intro" → I'll enhance just the introduction
-• Say "delete section 3" → I'll remove exactly that section
+• Surgically edit specific sections in LaTeX
+• Write, fix, and explain LaTeX with precision
 • Full validation and rollback protection
-
-Select text in the editor and I'll surgically improve it, or just ask me anything!`,
+• Generate equations, tables, and figures${ragStatus}`,
       timestamp: new Date().toISOString(),
       autoApplied: false
     }]);
   }, [documents]);
 
-  // Main function with natural language responses (unchanged)
-  const sendChatMessage = async (message, isLatexAssist = false, assistAction = '') => {
+  // Main function with natural language responses
+  const sendChatMessage = useCallback(async (message, isLatexAssist = false, assistAction = '') => {
     if (!message.trim() || isChatLoading || !surgicalEditingService) return;
 
     console.log('🚀 LaTeXEditor sending message with surgical editing:', message.substring(0, 50));
@@ -428,6 +471,9 @@ Select text in the editor and I'll surgically improve it, or just ask me anythin
           validation: surgicalResult.metadata.validation
         }]);
 
+        // Show the surgical edits float when new edit is made
+        setShowSurgicalEditsFloat(true);
+
       } else {
         console.log('❌ Surgical edit failed, showing natural error message');
         
@@ -461,10 +507,10 @@ Let me try again, or you can rephrase your request.`,
       setIsChatLoading(false);
       setIsProcessingSurgicalEdit(false);
     }
-  };
+  }, [isChatLoading, surgicalEditingService, selectedText, selectionRange, latexCode]);
 
-  // Quick action handlers (unchanged)
-  const handleQuickAction = (action) => {
+  // Quick action handlers
+  const handleQuickAction = useCallback((action) => {
     const actions = {
       equation: 'Generate a mathematical equation in LaTeX',
       table: 'Create a professional table in LaTeX',
@@ -473,9 +519,9 @@ Let me try again, or you can rephrase your request.`,
     };
     
     sendChatMessage(actions[action], true, action);
-  };
+  }, [sendChatMessage]);
 
-  const handleSelectedTextAction = (action) => {
+  const handleSelectedTextAction = useCallback((action) => {
     if (!selectedText) return;
 
     const actions = {
@@ -486,9 +532,9 @@ Let me try again, or you can rephrase your request.`,
     };
 
     sendChatMessage(actions[action], true, action);
-  };
+  }, [selectedText, sendChatMessage]);
 
-  // Compilation handler (unchanged)
+  // Compilation handler
   const handleCompile = useCallback(async (isAutoSave = false) => {
     setIsCompiling(true);
     setCompileErrors([]);
@@ -544,10 +590,10 @@ Let me try again, or you can rephrase your request.`,
     } finally {
       setIsCompiling(false);
     }
-  }, [projectId, latexCode, pdfUrl, project, api]);
+  }, [projectId, latexCode, pdfUrl, api]);
 
-  // Save project content (unchanged)
-  const saveProject = async (content = latexCode, title = project?.title) => {
+  // Save project content
+  const saveProject = useCallback(async (content = latexCode, title = project?.title) => {
     if (!project) return;
     
     try {
@@ -565,7 +611,7 @@ Let me try again, or you can rephrase your request.`,
     } catch (error) {
       console.error('Failed to save project:', error);
     }
-  };
+  }, [latexCode, project, api, projectId]);
 
   // Load project data from API
   useEffect(() => {
@@ -573,7 +619,7 @@ Let me try again, or you can rephrase your request.`,
       loadProject();
       loadDocuments();
     }
-  }, [projectId]);
+  }, [projectId, loadProject, loadDocuments]);
 
   // Initialize file structure after project loads
   useEffect(() => {
@@ -612,7 +658,7 @@ Let me try again, or you can rephrase your request.`,
     performInitialCompilation();
   }, [latexCode, isInitialLoad, project, loading, handleCompile]);
 
-  // Keyboard shortcuts (unchanged)
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key === 's') {
@@ -635,21 +681,21 @@ Let me try again, or you can rephrase your request.`,
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isCompiling, latexCode, handleCompile, isChatCollapsed]);
+  }, [isCompiling, latexCode, handleCompile, handleToggleChat]);
 
-  // Auto-save when content changes
+  // Auto-hide floating surgical edits indicator after 10 seconds
   useEffect(() => {
-    if (!project || loading || isInitialLoad) return;
-    
-    const autoSaveTimer = setTimeout(() => {
-      saveProject();
-    }, 2000);
-    
-    return () => clearTimeout(autoSaveTimer);
-  }, [latexCode, project, loading, isInitialLoad, saveProject]);
+    if (surgicalEditHistory.length > 0 && showSurgicalEditsFloat) {
+      const timer = setTimeout(() => {
+        setShowSurgicalEditsFloat(false);
+      }, 10000); // Hide after 10 seconds
+      
+      return () => clearTimeout(timer);
+    }
+  }, [surgicalEditHistory.length, showSurgicalEditsFloat]);
 
   // File selection handler
-  const handleFileSelect = (file) => {
+  const handleFileSelect = useCallback((file) => {
     setActiveFile(file);
     
     if (file.name === 'main.tex') {
@@ -659,10 +705,10 @@ Let me try again, or you can rephrase your request.`,
     } else if (file.name.endsWith('.tex')) {
       setLatexCode(getSampleChapterContent(file.name));
     }
-  };
+  }, []);
 
   // Folder toggle handler
-  const toggleFolder = (folderName) => {
+  const toggleFolder = useCallback((folderName) => {
     const newExpanded = new Set(expandedFolders);
     if (newExpanded.has(folderName)) {
       newExpanded.delete(folderName);
@@ -670,15 +716,15 @@ Let me try again, or you can rephrase your request.`,
       newExpanded.add(folderName);
     }
     setExpandedFolders(newExpanded);
-  };
+  }, [expandedFolders]);
 
   // Title editing functions
-  const handleTitleClick = () => {
+  const handleTitleClick = useCallback(() => {
     setIsEditingTitle(true);
     setTempTitle(project?.title || 'Untitled Project');
-  };
+  }, [project?.title]);
 
-  const handleTitleSave = async () => {
+  const handleTitleSave = useCallback(async () => {
     const newTitle = tempTitle.trim() || 'Untitled Project';
     
     if (newTitle !== project?.title) {
@@ -687,15 +733,15 @@ Let me try again, or you can rephrase your request.`,
     }
     
     setIsEditingTitle(false);
-  };
+  }, [tempTitle, project?.title, saveProject, latexCode]);
 
-  const handleTitleCancel = () => {
+  const handleTitleCancel = useCallback(() => {
     setTempTitle(project?.title || 'Untitled Project');
     setIsEditingTitle(false);
-  };
+  }, [project?.title]);
 
   // Handle text selection
-  const handleTextSelection = (text, range) => {
+  const handleTextSelection = useCallback((text, range) => {
     console.log('Text selected:', text.length, 'characters');
     setSelectedText(text);
     setSelectionRange(range);
@@ -704,10 +750,10 @@ Let me try again, or you can rephrase your request.`,
       console.log('Auto-expanding chat panel due to text selection');
       setIsChatCollapsed(false);
     }
-  };
+  }, [isChatCollapsed, isMobile]);
 
   // Direct text injection
-  const injectTextIntoEditor = (newText, range = null) => {
+  const injectTextIntoEditor = useCallback((newText, range = null) => {
     console.log('🔧 LaTeXEditor: Direct text injection');
     console.log('   - newText length:', newText?.length || 0);
     console.log('   - range:', range);
@@ -748,10 +794,10 @@ Let me try again, or you can rephrase your request.`,
     
     setSelectedText('');
     setSelectionRange({ start: 0, end: 0 });
-  };
+  }, [latexCode, selectedText]);
 
   // Manual apply with better code extraction
-  const handleManualApplyText = (messageId, code) => {
+  const handleManualApplyText = useCallback((messageId, code) => {
     if (code) {
       console.log('🔧 LaTeXEditor: Manual apply triggered');
       injectTextIntoEditor(code, selectedText ? selectionRange : null);
@@ -762,10 +808,10 @@ Let me try again, or you can rephrase your request.`,
           : msg
       ));
     }
-  };
+  }, [injectTextIntoEditor, selectedText, selectionRange]);
 
   // Function to manually apply any message content
-  const handleApplyAnyContent = (messageId, content) => {
+  const handleApplyAnyContent = useCallback((messageId, content) => {
     console.log('🔧 LaTeXEditor: Applying any content');
     const processedContent = extractOrConvertLatexCode(content) || content;
     injectTextIntoEditor(processedContent, selectedText ? selectionRange : null);
@@ -775,10 +821,10 @@ Let me try again, or you can rephrase your request.`,
         ? { ...msg, manuallyApplied: true }
         : msg
     ));
-  };
+  }, [injectTextIntoEditor, selectedText, selectionRange]);
 
   // Get editor context for chat
-  const getEditorContext = () => {
+  const getEditorContext = useCallback(() => {
     if (!selectedText || selectionRange.start === 0) {
       return latexCode;
     }
@@ -787,10 +833,10 @@ Let me try again, or you can rephrase your request.`,
     const contextEnd = Math.min(latexCode.length, selectionRange.end + 200);
     
     return latexCode.substring(contextStart, contextEnd);
-  };
+  }, [selectedText, selectionRange, latexCode]);
 
   // Document management handlers
-  const handleDocumentsUploaded = async (newDocuments) => {
+  const handleDocumentsUploaded = useCallback(async (newDocuments) => {
     console.log(`${newDocuments.length} documents uploaded, refreshing list...`);
     await loadDocuments();
     
@@ -830,9 +876,9 @@ Let me try again, or you can rephrase your request.`,
     };
     
     pollForUpdates();
-  };
+  }, [loadDocuments, api, projectId]);
 
-  const handleDeleteDocument = async (documentId) => {
+  const handleDeleteDocument = useCallback(async (documentId) => {
     if (window.confirm('Are you sure you want to delete this document? This will also remove its embeddings.')) {
       try {
         await api.delete(`/documents/${projectId}/${documentId}`);
@@ -843,9 +889,9 @@ Let me try again, or you can rephrase your request.`,
         alert('Failed to delete document');
       }
     }
-  };
+  }, [api, projectId]);
 
-  const handleReprocessDocument = async (documentId) => {
+  const handleReprocessDocument = useCallback(async (documentId) => {
     try {
       await api.post(`/documents/${projectId}/${documentId}/reprocess`);
       loadDocuments();
@@ -854,10 +900,12 @@ Let me try again, or you can rephrase your request.`,
       console.error('Failed to reprocess document:', error);
       alert('Failed to reprocess document');
     }
-  };
+  }, [api, projectId, loadDocuments]);
 
   // Project actions
-  const handleCloneProject = async () => {
+  const handleCloneProject = useCallback(async () => {
+    if (!project?.title) return;
+    
     try {
       const response = await api.post(`/projects/${projectId}/clone`, { title: `${project.title} (Copy)` });
       if (response.data.success) {
@@ -866,9 +914,9 @@ Let me try again, or you can rephrase your request.`,
     } catch (error) {
       console.error('Failed to clone project:', error);
     }
-  };
+  }, [api, projectId, project?.title, navigate]);
 
-  const handleDeleteProject = async () => {
+  const handleDeleteProject = useCallback(async () => {
     if (window.confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
       try {
         await api.delete(`/projects/${projectId}`);
@@ -877,18 +925,15 @@ Let me try again, or you can rephrase your request.`,
         console.error('Failed to delete project:', error);
       }
     }
-  };
+  }, [api, projectId, navigate]);
 
-  const handleCollaboratorsChange = (newCollaborators) => {
+  const handleCollaboratorsChange = useCallback((newCollaborators) => {
     setCollaborators(newCollaborators);
     console.log(`👥 Collaborators updated: ${newCollaborators.length} total`);
-  };
+  }, []);
 
-  // Get the current layout widths
-  const { editor: currentEditorWidth, chat: currentChatWidth, preview: currentPreviewWidth } = getLayoutWidths();
-
-  // Extract LaTeX code function (unchanged)
-  const extractOrConvertLatexCode = (text) => {
+  // Extract LaTeX code function
+  const extractOrConvertLatexCode = useCallback((text) => {
     if (!text || typeof text !== 'string') {
       console.log('❌ Invalid text input for extraction');
       return null;
@@ -945,11 +990,9 @@ Let me try again, or you can rephrase your request.`,
     
     console.log('❌ No LaTeX code detected and content not suitable');
     return null;
-  };
+  }, [selectedText]);
 
-  // [Include all other existing functions here - sendChatMessage, handleCompile, etc.]
-
-  // Loading and error states (unchanged)
+  // Loading and error states
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50">
@@ -977,6 +1020,9 @@ Let me try again, or you can rephrase your request.`,
     );
   }
 
+  // Get the current layout widths
+  const { editor: currentEditorWidth, chat: currentChatWidth, preview: currentPreviewWidth } = getLayoutWidths;
+
   // Prepare props for child components with mobile support
   const toolbarProps = {
     project,
@@ -996,12 +1042,12 @@ Let me try again, or you can rephrase your request.`,
     onNavigateBack: () => navigate('/dashboard'),
     onCloneProject: handleCloneProject,
     onDeleteProject: handleDeleteProject,
-    // Share-related props (unchanged)
+    // Share-related props
     onShareProject: () => {}, // Include your share function
     onCreateShareLink: () => {}, // Include your share function
     projectCollaborators: collaborators,
-    // NEW: Mobile-specific props (only passed if mobile)
-    ...(isMobile && {
+    // Mobile-specific props (only passed if mobile and initialized)
+    ...(isMobile && hasInitializedMobile && {
       isMobile,
       currentScreenMode,
       mobileLeftPanelOpen,
@@ -1027,9 +1073,9 @@ Let me try again, or you can rephrase your request.`,
       }
     },
     onToggleFolder: toggleFolder,
-    onToggleSidebar: () => setSidebarOpen(!sidebarOpen), // Desktop functionality preserved
-    // NEW: Mobile-specific props (only passed if mobile)
-    ...(isMobile && {
+    onToggleSidebar: () => setSidebarOpen(!sidebarOpen),
+    // Mobile-specific props (only passed if mobile and initialized)
+    ...(isMobile && hasInitializedMobile && {
       isMobile,
       mobileLeftPanelOpen,
       onMobileClose: handleMobileBackToEditor
@@ -1051,8 +1097,10 @@ Let me try again, or you can rephrase your request.`,
     ragEnabled: documents.filter(doc => doc.processingStatus === 'completed').length > 0,
     isProcessingSurgicalEdit,
     surgicalEditHistory: surgicalEditHistory.slice(-5),
-    // NEW: Mobile-specific props (only passed if mobile)
-    ...(isMobile && {
+    showSurgicalEditsInline: true, // Show as floating box instead of bottom strip
+    hideSurgicalEditsPanel: true, // Hide the bottom surgical edits panel
+    // Mobile-specific props (only passed if mobile and initialized)
+    ...(isMobile && hasInitializedMobile && {
       isMobile,
       currentScreenMode
     })
@@ -1080,8 +1128,8 @@ Let me try again, or you can rephrase your request.`,
     isProcessingSurgicalEdit,
     surgicalEditHistory,
     surgicalEditingService,
-    // NEW: Mobile-specific props (only passed if mobile)
-    ...(isMobile && {
+    // Mobile-specific props (only passed if mobile and initialized)
+    ...(isMobile && hasInitializedMobile && {
       isMobile,
       mobileChatPanelOpen,
       onMobileClose: handleMobileBackToEditor
@@ -1093,8 +1141,8 @@ Let me try again, or you can rephrase your request.`,
     isCompiling,
     editorWidth: currentPreviewWidth,
     compileErrors,
-    // NEW: Mobile-specific props (only passed if mobile)
-    ...(isMobile && {
+    // Mobile-specific props (only passed if mobile and initialized)
+    ...(isMobile && hasInitializedMobile && {
       isMobile,
       mobilePreviewMode,
       onMobileClose: handleMobileBackToEditor
@@ -1113,16 +1161,14 @@ Let me try again, or you can rephrase your request.`,
     <Collaborator
       projectId={projectId}
       project={project}
-      onCollaboratorsChange={(newCollaborators) => {
-        setCollaborators(newCollaborators);
-        console.log(`👥 Collaborators updated: ${newCollaborators.length} total`);
-      }}
+      onCollaboratorsChange={handleCollaboratorsChange}
     >
       {(collaborationProps) => (
         <div className="h-screen flex flex-col bg-gray-50 relative">
-          <Toolbar {...toolbarProps} />
+          {/* Only render Toolbar if we have a project or are not loading */}
+          {(project || !loading) && <Toolbar {...toolbarProps} />}
           
-          {isMobile ? (
+          {isMobile && hasInitializedMobile ? (
             // MOBILE LAYOUT
             <div className="flex-1 relative overflow-hidden">
               {/* Main Content - Always Full Screen */}
@@ -1168,7 +1214,7 @@ Let me try again, or you can rephrase your request.`,
               )}
             </div>
           ) : (
-            // DESKTOP LAYOUT (unchanged)
+            // DESKTOP LAYOUT
             <div className="flex-1 flex overflow-hidden h-full" ref={containerRef}>
               {/* Left Sidebar */}
               <div className={`${sidebarOpen ? 'w-64' : 'w-0'} transition-all duration-300 ease-in-out overflow-hidden bg-white border-r border-gray-200 flex flex-col`}>
@@ -1177,19 +1223,13 @@ Let me try again, or you can rephrase your request.`,
                     <FileTree {...fileTreeProps} />
                   </div>
                   <div className="border-t border-gray-200 p-4 space-y-4 flex-shrink-0">
-                    <DocumentUpload 
-                      projectId={projectId}
-                      documents={documents}
-                      onDocumentsUploaded={() => {}} // Include your handler
-                      onDeleteDocument={() => {}} // Include your handler
-                      onReprocessDocument={() => {}} // Include your handler
-                    />
+                    <DocumentUpload {...documentUploadProps} />
                   </div>
                 </div>
               </div>
               
-              {/* Main Content Area */}
-              <div className="flex-1 flex relative min-w-0">
+              {/* Main Content Area - Fixed to prevent bottom strips from affecting layout */}
+              <div className="flex-1 flex relative min-w-0 overflow-hidden">
                 <EditorPanel {...editorProps} />
                 
                 {/* Resize handles for desktop only */}
@@ -1197,7 +1237,7 @@ Let me try again, or you can rephrase your request.`,
                   className={`w-1 bg-gray-200 hover:bg-blue-300 cursor-col-resize flex items-center justify-center group transition-colors select-none ${
                     isResizing && (resizeType === 'editor-chat' || resizeType === 'editor-preview') ? 'bg-blue-400' : ''
                   }`}
-                  onMouseDown={(e) => {}} // Include your handleMouseDown function
+                  onMouseDown={(e) => handleMouseDown(e, isChatCollapsed ? 'editor-preview' : 'editor-chat')}
                   title={isChatCollapsed ? "Drag to resize editor and preview panels" : "Drag to resize editor and chat panels"}
                   style={{ zIndex: 10 }}
                 >
@@ -1211,7 +1251,7 @@ Let me try again, or you can rephrase your request.`,
                     className={`w-1 bg-gray-200 hover:bg-blue-300 cursor-col-resize flex items-center justify-center group transition-colors select-none ${
                       isResizing && resizeType === 'chat-preview' ? 'bg-blue-400' : ''
                     }`}
-                    onMouseDown={(e) => {}} // Include your handleMouseDown function
+                    onMouseDown={(e) => handleMouseDown(e, 'chat-preview')}
                     title="Drag to resize chat and preview panels"
                     style={{ zIndex: 10 }}
                   >
