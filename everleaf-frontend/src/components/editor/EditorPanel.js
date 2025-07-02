@@ -6,7 +6,8 @@ import {
   ScissorsIcon,
   CheckCircleIcon,
   ExclamationTriangleIcon,
-  ClockIcon
+  ClockIcon,
+  SparklesIcon
 } from '@heroicons/react/24/outline';
 
 const EditorPanel = forwardRef(({
@@ -24,9 +25,12 @@ const EditorPanel = forwardRef(({
   isChatCollapsed,
   onToggleChat,
   ragEnabled,
-  // NEW: Surgical editing props
+  // Surgical editing props
   isProcessingSurgicalEdit,
-  surgicalEditHistory
+  surgicalEditHistory,
+  // NEW: Mobile-specific props (optional)
+  isMobile,
+  currentScreenMode
 }, ref) => {
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
@@ -254,8 +258,8 @@ Hello World!
       monaco.editor.setTheme('latex-surgical-theme');
       console.log('LaTeX language and surgical theme configured');
 
-      // Add selection change listener for chat integration
-      if (onTextSelection) {
+      // Add selection change listener for chat integration (desktop only)
+      if (onTextSelection && !isMobile) {
         editor.onDidChangeCursorSelection((e) => {
           // Debounce selection changes to prevent excessive updates
           clearTimeout(editor._selectionTimeout);
@@ -277,10 +281,12 @@ Hello World!
         });
       }
 
-      // Add keyboard shortcut for chat toggle (Ctrl+I)
-      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyI, () => {
-        console.log('Chat toggle shortcut pressed');
-      });
+      // Add keyboard shortcut for chat toggle (Ctrl+I) - desktop only
+      if (!isMobile) {
+        editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyI, () => {
+          console.log('Chat toggle shortcut pressed');
+        });
+      }
 
       // NEW: Add surgical editing decorations
       if (isProcessingSurgicalEdit) {
@@ -338,7 +344,7 @@ Hello World!
       : null;
 
     return (
-      <div className={`absolute top-2 right-2 z-20 p-2 rounded-lg shadow-lg transition-all duration-300 ${
+      <div className={`absolute ${isMobile ? 'top-4 left-4 right-4' : 'top-2 right-2'} z-20 p-2 rounded-lg shadow-lg transition-all duration-300 ${
         isProcessingSurgicalEdit 
           ? 'bg-blue-100 border border-blue-300'
           : lastEdit?.validation?.overallValid !== false
@@ -380,6 +386,186 @@ Hello World!
     );
   };
 
+  // NEW: Mobile-specific rendering
+  if (isMobile) {
+    return (
+      <div className={`flex flex-col bg-white relative transition-all duration-200 h-full ${
+        isProcessingSurgicalEdit ? 'bg-gradient-to-b from-blue-50 to-white' : ''
+      }`}>
+        {/* Mobile Editor Header */}
+        <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center space-x-3">
+            <CodeBracketIcon className="w-5 h-5 text-gray-600" />
+            <span className="text-lg font-semibold text-gray-900">
+              {activeFile?.name || 'Editor'}
+            </span>
+            {/* Mobile surgical editing indicator */}
+            {isProcessingSurgicalEdit && (
+              <div className="flex items-center space-x-2 px-3 py-1 bg-blue-100 rounded-full text-sm">
+                <ScissorsIcon className="w-4 h-4 text-blue-600 animate-pulse" />
+                <span className="text-blue-800 font-medium">Surgical Edit</span>
+              </div>
+            )}
+          </div>
+          
+          {/* Mobile selection info */}
+          {selectedText && (
+            <div className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
+              {selectedText.length} chars selected
+            </div>
+          )}
+        </div>
+        
+        {/* Mobile Editor Content */}
+        <div className="flex-1 relative">
+          {/* Mobile surgical editing status overlay */}
+          {renderSurgicalStatus()}
+          
+          <Editor
+            height="100%"
+            language="latex"
+            value={latexCode || defaultLatex}
+            onChange={handleEditorChange}
+            onMount={handleEditorDidMount}
+            loading={<div className="flex items-center justify-center h-full">
+              <div className="text-gray-500 text-center">
+                <div className="text-lg mb-2">
+                  {isProcessingSurgicalEdit ? 'Preparing surgical editing...' : 'Loading editor...'}
+                </div>
+              </div>
+            </div>}
+            options={{
+              fontSize: isMobile ? 16 : 14, // Larger font on mobile
+              automaticLayout: true,
+              wordWrap: 'on',
+              selectOnLineNumbers: true,
+              roundedSelection: false,
+              readOnly: isProcessingSurgicalEdit,
+              cursorStyle: 'line',
+              scrollBeyondLastLine: false,
+              scrollbar: {
+                alwaysConsumeMouseWheel: false,
+                verticalScrollbarSize: isMobile ? 12 : 10, // Larger scrollbar on mobile
+                horizontalScrollbarSize: isMobile ? 12 : 10
+              },
+              minimap: {
+                enabled: false // Always disabled on mobile
+              },
+              lineNumbers: 'on',
+              renderLineHighlight: isProcessingSurgicalEdit ? 'none' : 'line',
+              selectionHighlight: !isProcessingSurgicalEdit,
+              // Mobile-specific options
+              contextmenu: false, // Disable context menu on mobile
+              quickSuggestions: false, // Disable quick suggestions on mobile
+              parameterHints: { enabled: false }, // Disable parameter hints on mobile
+              suggestOnTriggerCharacters: false, // Disable auto-suggest on mobile
+              acceptSuggestionOnEnter: 'off', // Disable enter to accept suggestions
+              tabCompletion: 'off', // Disable tab completion
+              wordBasedSuggestions: false, // Disable word-based suggestions
+              links: false, // Disable clickable links
+              colorDecorators: false, // Disable color decorators
+              codeLens: false // Disable code lens
+            }}
+          />
+          
+          {/* Mobile surgical editing overlay */}
+          {isProcessingSurgicalEdit && (
+            <div className="absolute inset-0 bg-blue-50 bg-opacity-40 flex items-center justify-center pointer-events-none z-10">
+              <div className="bg-white rounded-xl shadow-lg p-6 border border-blue-200 flex flex-col items-center space-y-3 mx-4">
+                <ScissorsIcon className="w-8 h-8 text-blue-600 animate-pulse" />
+                <div className="text-center">
+                  <div className="font-semibold text-blue-800 text-lg">Surgical Edit in Progress</div>
+                  <div className="text-sm text-blue-600 mt-1">
+                    Analyzing document structure and applying precise changes...
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Mobile Compile Errors */}
+        {compileErrors.length > 0 && (
+          <div className="bg-red-50 border-t border-red-200 p-4 max-h-40 overflow-y-auto flex-shrink-0">
+            <h4 className="text-sm font-semibold text-red-800 mb-3">Compilation Errors:</h4>
+            <ul className="text-sm text-red-700 space-y-2">
+              {compileErrors.map((error, index) => (
+                <li key={index} className="font-mono text-xs bg-red-100 p-2 rounded">
+                  • {error}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Mobile Surgical Edit History Panel */}
+        {surgicalEditHistory && surgicalEditHistory.length > 0 && !isProcessingSurgicalEdit && (
+          <div className="bg-gray-50 border-t border-gray-200 p-3 flex-shrink-0">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-gray-700">Recent Surgical Edits</span>
+              <span className="text-xs text-gray-500">{surgicalEditHistory.length} total</span>
+            </div>
+            <div className="flex space-x-2 overflow-x-auto">
+              {surgicalEditHistory.slice(-3).map((edit, index) => (
+                <div 
+                  key={edit.id} 
+                  className={`flex-shrink-0 px-3 py-2 rounded-lg text-xs border ${
+                    edit.validation?.overallValid !== false
+                      ? 'bg-green-100 border-green-300 text-green-800'
+                      : 'bg-red-100 border-red-300 text-red-800'
+                  }`}
+                  title={`${edit.changes.action || 'Edit'}: ${edit.message}`}
+                >
+                  <div className="flex items-center space-x-2">
+                    {edit.validation?.overallValid !== false ? (
+                      <CheckCircleIcon className="w-4 h-4" />
+                    ) : (
+                      <ExclamationTriangleIcon className="w-4 h-4" />
+                    )}
+                    <div>
+                      <div className="font-medium">
+                        {edit.changes.action || 'Edit'}
+                      </div>
+                      <div className="text-xs opacity-75">
+                        {edit.changes.deltaLength > 0 ? '+' : ''}{edit.changes.deltaLength}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Mobile CSS for surgical editing styles */}
+        <style jsx>{`
+          .surgical-edit-highlight {
+            background-color: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 3px;
+          }
+          
+          .surgical-edit-glyph {
+            background-color: rgba(59, 130, 246, 0.8);
+            width: 3px !important;
+            border-radius: 2px;
+          }
+          
+          .surgical-edit-glyph:before {
+            content: "🔪";
+            font-size: 10px;
+            color: white;
+            position: absolute;
+            left: 2px;
+            top: 50%;
+            transform: translateY(-50%);
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  // DESKTOP LAYOUT (unchanged from original)
   return (
     <div 
       className={`flex flex-col bg-white relative transition-all duration-200 ${
@@ -432,14 +618,7 @@ Hello World!
             >
               <div className="relative">
                 {/* Enhanced AI icon with surgical indicator */}
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-purple-500">
-                  {/* Main star */}
-                  <path d="M8 2L8.5 4.5L11 5L8.5 5.5L8 8L7.5 5.5L5 5L7.5 4.5L8 2Z" fill="currentColor" opacity="0.9" />
-                  {/* Top right small star */}
-                  <path d="M12 3L12.25 3.75L13 4L12.25 4.25L12 5L11.75 4.25L11 4L11.75 3.75L12 3Z" fill="currentColor" opacity="0.7" />
-                  {/* Bottom left small star */}
-                  <path d="M4 10L4.25 10.75L5 11L4.25 11.25L4 12L3.75 11.25L3 11L3.75 10.75L4 10Z" fill="currentColor" opacity="0.6" />
-                </svg>
+                <SparklesIcon className="w-4 h-4 text-purple-500" />
                 {ragEnabled && (
                   <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-blue-500 rounded-full" title="RAG Mode Active"></div>
                 )}

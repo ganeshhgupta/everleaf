@@ -8,7 +8,9 @@ import {
   XMarkIcon,
   ArrowPathIcon,
   ScissorsIcon,
-  WrenchScrewdriverIcon
+  WrenchScrewdriverIcon,
+  SparklesIcon,
+  ArrowLeftIcon
 } from '@heroicons/react/24/outline';
 
 const ChatPanel = ({
@@ -34,7 +36,11 @@ const ChatPanel = ({
   // Surgical editing props
   isProcessingSurgicalEdit,
   surgicalEditHistory,
-  surgicalEditingService
+  surgicalEditingService,
+  // NEW: Mobile-specific props (optional)
+  isMobile,
+  mobileChatPanelOpen,
+  onMobileClose
 }) => {
   const [inputMessage, setInputMessage] = useState('');
   const [showSurgicalHistory, setShowSurgicalHistory] = useState(false);
@@ -158,10 +164,150 @@ const ChatPanel = ({
     );
   };
 
+  // Mobile-specific rendering - FIXED: No header strip, just content
+  if (isMobile) {
+    return (
+      <div className="bg-white h-full flex flex-col">
+        {/* FIXED: Mobile Header - Only Back Button, No Chat Title */}
+        <div className="bg-white border-b border-gray-200 px-3 py-2 flex items-center justify-between flex-shrink-0">
+          <button
+            onClick={onMobileClose}
+            className="text-gray-600 hover:text-gray-800 transition-colors p-1 rounded-md hover:bg-gray-100"
+            title="Back to Editor"
+          >
+            <ArrowLeftIcon className="w-5 h-5" />
+          </button>
+          
+          <div className="flex items-center gap-2">
+            {/* Status and controls on the right */}
+            {ragEnabled && ragMode && (
+              <span className="text-xs text-blue-600 font-medium">RAG</span>
+            )}
+            {isProcessingSurgicalEdit && (
+              <ArrowPathIcon className="w-4 h-4 text-gray-500 animate-spin" />
+            )}
+          </div>
+        </div>
+
+        {/* Mobile Messages - Full height */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
+          {messages.map((message) => (
+            <div
+              key={message.id}
+              className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+            >
+              <div
+                className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${
+                  message.role === 'user'
+                    ? 'bg-blue-600 text-white'
+                    : message.isError
+                    ? 'bg-red-50 border border-red-200 text-red-700'
+                    : message.surgicalEdit?.success
+                    ? 'bg-green-50 border border-green-200 text-gray-800'
+                    : 'bg-gray-50 border border-gray-200 text-gray-800'
+                }`}
+              >
+                {message.role === 'user' ? (
+                  <div>
+                    <div className="whitespace-pre-wrap break-words text-sm">{message.content}</div>
+                  </div>
+                ) : (
+                  renderMessageContent(message)
+                )}
+                
+                <div className={`text-xs mt-2 ${
+                  message.role === 'user' ? 'text-blue-100' : 'text-gray-500'
+                }`}>
+                  {new Date(message.timestamp).toLocaleTimeString()}
+                  {message.surgicalEdit && (
+                    <span className="ml-2">
+                      {message.surgicalEdit.success ? '✓' : '✗'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+          
+          {/* Mobile Loading indicator */}
+          {isLoading && (
+            <div className="flex justify-start">
+              <div className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 max-w-[85%]">
+                <div className="flex items-center gap-3">
+                  <ArrowPathIcon className="w-5 h-5 animate-spin text-gray-500" />
+                  <div>
+                    <span className="text-gray-600 text-sm">
+                      {isProcessingSurgicalEdit ? 'Processing surgical edit...' : 'AI is thinking...'}
+                    </span>
+                    {isProcessingSurgicalEdit && (
+                      <div className="text-xs text-gray-500 mt-1">
+                        Analyzing document structure and applying precise changes...
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Mobile Input Area */}
+        <div className="border-t border-gray-200 p-4 flex-shrink-0">
+          <div className="flex gap-3">
+            <textarea
+              ref={inputRef}
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder={
+                isProcessingSurgicalEdit
+                  ? "Surgical edit in progress..."
+                  : "Ask me to write LaTeX code, fix errors, or edit sections..."
+              }
+              disabled={isLoading || isProcessingSurgicalEdit}
+              className="flex-1 resize-none border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:bg-gray-50"
+              rows={3}
+            />
+            <button
+              onClick={handleSendMessage}
+              disabled={!inputMessage.trim() || isLoading || isProcessingSurgicalEdit}
+              className="px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[56px]"
+            >
+              {isLoading || isProcessingSurgicalEdit ? (
+                <ArrowPathIcon className="w-5 h-5 animate-spin" />
+              ) : (
+                <PaperAirplaneIcon className="w-5 h-5" />
+              )}
+            </button>
+          </div>
+          
+          {/* Mobile Status indicators */}
+          <div className="flex items-center justify-between mt-3 text-xs text-gray-500">
+            <div className="flex items-center gap-4">
+              {ragEnabled && ragMode && (
+                <span className="text-blue-600 font-medium">RAG Mode Active</span>
+              )}
+              {isProcessingSurgicalEdit && (
+                <span className="text-orange-600 animate-pulse font-medium">Processing edit...</span>
+              )}
+            </div>
+            <div className="text-xs">
+              Enter to send
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Desktop rendering when not collapsed
   if (isCollapsed) {
     return null;
   }
 
+  // DESKTOP LAYOUT (unchanged from original)
   return (
     <div 
       className="bg-white border-l border-gray-200 flex flex-col h-full"
@@ -242,8 +388,6 @@ const ChatPanel = ({
           </div>
         </div>
       )}
-
-
 
       {/* FIXED: Messages with proper flex layout */}
       <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0">

@@ -15,7 +15,9 @@ import {
   EnvelopeIcon,
   ClipboardDocumentIcon,
   UserIcon,
-  ChevronDownIcon
+  ChevronDownIcon,
+  EyeIcon,
+  ChatBubbleLeftRightIcon
 } from '@heroicons/react/24/outline';
 import { downloadTeX, downloadPDF } from '../../utils/latexUtils';
 
@@ -40,7 +42,17 @@ const Toolbar = ({
   // Share-related props
   onShareProject,
   onCreateShareLink,
-  projectCollaborators = []
+  projectCollaborators = [],
+  // NEW: Mobile-specific props
+  isMobile,
+  currentScreenMode,
+  mobileLeftPanelOpen,
+  mobileChatPanelOpen,
+  mobilePreviewMode,
+  onMobileHamburgerToggle,
+  onMobileChatToggle,
+  onMobilePreviewToggle,
+  onMobileBackToEditor
 }) => {
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
@@ -108,28 +120,6 @@ const Toolbar = ({
     // Show coming soon message instead of actually sending
     alert('📧 Email invitations coming soon! Use link sharing for now.');
     return;
-    
-    // Original code commented out:
-    /*
-    if (!shareEmails.trim()) return;
-    
-    const emails = shareEmails.split(',').map(email => email.trim()).filter(email => email);
-    if (emails.length === 0) return;
-
-    try {
-      if (onShareProject) {
-        await onShareProject(emails, sharePermission.toLowerCase());
-      }
-      setEmailsSent(true);
-      setShareEmails('');
-      
-      // Reset success message after 3 seconds
-      setTimeout(() => setEmailsSent(false), 3000);
-    } catch (error) {
-      console.error('Failed to share project:', error);
-      alert('Failed to send invitations. Please try again.');
-    }
-    */
   };
 
   const handleCreateShareLink = async () => {
@@ -156,7 +146,6 @@ const Toolbar = ({
   const handleCopyLink = async () => {
     try {
       await navigator.clipboard.writeText(shareLink);
-      // You could add a toast notification here
       alert('Link copied to clipboard!');
     } catch (error) {
       console.error('Failed to copy link:', error);
@@ -173,6 +162,209 @@ const Toolbar = ({
     }
   };
 
+  if (isMobile) {
+    // MOBILE TOOLBAR LAYOUT
+    return (
+      <div className="bg-white border-b border-gray-200 px-3 py-2 flex items-center justify-between relative z-50">
+        
+        {/* Left Section - Hamburger + Project Title */}
+        <div className="flex items-center space-x-3 flex-1 min-w-0">
+          <button 
+            onClick={onMobileHamburgerToggle}
+            className={`p-2 rounded-md transition-colors ${
+              mobileLeftPanelOpen 
+                ? 'bg-blue-100 text-blue-600' 
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+            }`}
+          >
+            <Bars3Icon className="w-5 h-5" />
+          </button>
+          
+          {/* Project Title - Truncated on mobile */}
+          <div className="flex-1 min-w-0">
+            {isEditingTitle ? (
+              <input
+                type="text"
+                value={tempTitle}
+                onChange={(e) => setTempTitle(e.target.value)}
+                onKeyDown={handleTitleKeyPress}
+                onBlur={onTitleSave}
+                className="w-full text-sm font-medium bg-white border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                autoFocus
+              />
+            ) : (
+              <h1 
+                className="text-sm font-medium text-gray-900 truncate cursor-pointer"
+                onClick={onTitleClick}
+              >
+                {project?.title || 'LaTeX Editor'}
+              </h1>
+            )}
+          </div>
+        </div>
+
+        {/* Right Section - Action Buttons */}
+        <div className="flex items-center space-x-1">
+          
+          {/* Compile Button - Square Icon */}
+          <button
+            onClick={onCompile}
+            disabled={isCompiling}
+            className={`p-2 rounded-md transition-all ${
+              isCompiling 
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                : 'bg-green-600 text-white hover:bg-green-700 shadow-sm'
+            }`}
+            title={isCompiling ? 'Compiling...' : 'Compile'}
+          >
+            <PlayIcon className="w-5 h-5" />
+          </button>
+
+          {/* Download Button - Square Icon */}
+          <div className="relative" ref={downloadMenuRef}>
+            <button
+              onClick={() => setShowDownloadMenu(!showDownloadMenu)}
+              className="p-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+              title="Download"
+            >
+              <DocumentArrowDownIcon className="w-5 h-5" />
+            </button>
+            
+            {showDownloadMenu && (
+              <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+                <button
+                  onClick={handleDownloadTeX}
+                  className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-3"
+                >
+                  <DocumentTextIcon className="w-4 h-4 text-gray-500" />
+                  <span className="text-sm">Download .tex</span>
+                </button>
+                <button
+                  onClick={handleDownloadPDF}
+                  className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-3"
+                >
+                  <DocumentArrowDownIcon className="w-4 h-4 text-gray-500" />
+                  <span className="text-sm">Download PDF</span>
+                </button>
+                
+                <div className="border-t border-gray-100 mt-2 pt-2">
+                  <button
+                    onClick={handleCloneProject}
+                    className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-3"
+                  >
+                    <DocumentDuplicateIcon className="w-4 h-4 text-gray-500" />
+                    <span className="text-sm">Make a copy</span>
+                  </button>
+                  <button
+                    onClick={handleDeleteProject}
+                    className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 flex items-center space-x-3"
+                  >
+                    <TrashIcon className="w-4 h-4" />
+                    <span className="text-sm">Delete project</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Preview Button - Changes to Back when in preview mode */}
+          <button
+            onClick={mobilePreviewMode ? onMobileBackToEditor : onMobilePreviewToggle}
+            className={`p-2 rounded-md transition-colors ${
+              mobilePreviewMode 
+                ? 'bg-blue-600 text-white' 
+                : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'
+            }`}
+            title={mobilePreviewMode ? 'Back to Editor' : 'Preview'}
+          >
+            {mobilePreviewMode ? (
+              <ArrowLeftIcon className="w-5 h-5" />
+            ) : (
+              <EyeIcon className="w-5 h-5" />
+            )}
+          </button>
+
+          {/* AI Chat Button - Square Icon */}
+          <button
+            onClick={onMobileChatToggle}
+            className={`p-2 rounded-md transition-colors ${
+              mobileChatPanelOpen 
+                ? 'bg-blue-100 text-blue-600' 
+                : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'
+            }`}
+            title="AI Assistant"
+          >
+            <ChatBubbleLeftRightIcon className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Share Dialog - Mobile Optimized */}
+        {showShareDialog && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-sm w-full max-h-96 overflow-y-auto" ref={shareDialogRef}>
+              <div className="p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Share Project</h3>
+                  <button
+                    onClick={() => setShowShareDialog(false)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <XMarkIcon className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Link Sharing Section */}
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-gray-700">
+                      Link sharing is <strong>{linkSharingEnabled ? 'on' : 'off'}</strong>
+                    </span>
+                    <button
+                      onClick={handleToggleLinkSharing}
+                      disabled={isCreatingLink}
+                      className="text-sm text-blue-600 hover:text-blue-700 font-medium underline"
+                    >
+                      {isCreatingLink ? 'Creating...' : linkSharingEnabled ? 'Turn off' : 'Turn on'}
+                    </button>
+                  </div>
+                  
+                  {linkSharingEnabled && shareLink && (
+                    <div className="flex items-center space-x-2 p-2 bg-gray-50 rounded border">
+                      <LinkIcon className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                      <input
+                        type="text"
+                        value={shareLink}
+                        readOnly
+                        className="flex-1 bg-transparent text-xs text-gray-700 focus:outline-none"
+                      />
+                      <button
+                        onClick={handleCopyLink}
+                        className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded transition-colors"
+                        title="Copy link"
+                      >
+                        <ClipboardDocumentIcon className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => setShowShareDialog(false)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // DESKTOP TOOLBAR LAYOUT (unchanged from original)
   return (
     <div className="bg-white border-b border-gray-200 px-4 py-2">
       <div className="flex items-center justify-between">

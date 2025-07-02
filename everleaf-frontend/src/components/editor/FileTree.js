@@ -5,7 +5,8 @@ import {
   PlusIcon,
   ChevronRightIcon,
   ChevronDownIcon,
-  ChevronLeftIcon
+  ChevronLeftIcon,
+  XMarkIcon
 } from '@heroicons/react/24/outline';
 
 const FileTree = ({
@@ -15,7 +16,11 @@ const FileTree = ({
   sidebarOpen,
   onFileSelect,
   onToggleFolder,
-  onToggleSidebar
+  onToggleSidebar, // Desktop only
+  // NEW: Mobile-specific props
+  isMobile,
+  mobileLeftPanelOpen,
+  onMobileClose
 }) => {
   const renderFileTree = (files, level = 0) => {
     return files.map(file => (
@@ -56,6 +61,44 @@ const FileTree = ({
     ));
   };
 
+  if (isMobile) {
+    // MOBILE FILE TREE - Full height panel
+    return (
+      <div className="h-full bg-white flex flex-col">
+        {/* Mobile Header with close button */}
+        <div className="bg-white border-b border-gray-200 px-3 py-3 flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <h3 className="text-lg font-semibold text-gray-900">Files</h3>
+          </div>
+          <button 
+            onClick={onMobileClose}
+            className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+            title="Close Files Panel"
+          >
+            <XMarkIcon className="w-5 h-5" />
+          </button>
+        </div>
+        
+        {/* File Tree Content */}
+        <div className="flex-1 overflow-y-auto p-3">
+          {renderFileTree(files)}
+        </div>
+
+        {/* Add File Button - Mobile */}
+        <div className="border-t border-gray-200 p-3">
+          <button 
+            className="w-full flex items-center justify-center space-x-2 p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition-colors"
+            title="Add File"
+          >
+            <PlusIcon className="w-4 h-4" />
+            <span className="text-sm">Add File</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // DESKTOP FILE TREE - Original behavior
   if (!sidebarOpen) {
     return (
       // Collapsed state - show a thin vertical bar with expand button
@@ -75,7 +118,7 @@ const FileTree = ({
 
   return (
     <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
-      {/* Header with collapse button */}
+      {/* Desktop Header with collapse button */}
       <div className="bg-white border-b border-gray-200 px-3 py-2 h-9">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">

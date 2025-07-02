@@ -9,14 +9,19 @@ import {
   ChevronDoubleLeftIcon,
   ChevronDoubleRightIcon,
   ExclamationTriangleIcon,
-  XMarkIcon
+  XMarkIcon,
+  ArrowLeftIcon
 } from '@heroicons/react/24/outline';
 
 const PDFPreview = ({
   pdfUrl,
   isCompiling,
   editorWidth,
-  compileErrors = [] // NEW: Added compile errors prop
+  compileErrors = [], // Added compile errors prop
+  // NEW: Mobile-specific props (optional)
+  isMobile,
+  mobilePreviewMode,
+  onMobileClose
 }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
@@ -26,7 +31,12 @@ const PDFPreview = ({
   const [renderingPages, setRenderingPages] = useState(new Set());
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [showErrorOverlay, setShowErrorOverlay] = useState(false); // NEW: Error overlay state
+  const [showErrorOverlay, setShowErrorOverlay] = useState(false); // Error overlay state
+  
+  // NEW: Mobile header auto-hide state
+  const [isHeaderVisible, setIsHeaderVisible] = useState(true);
+  const [lastScrollY, setLastScrollY] = useState(0);
+  const [scrollTimeout, setScrollTimeout] = useState(null);
   
   const containerRef = useRef(null);
   const canvasRefs = useRef(new Map());
@@ -34,7 +44,67 @@ const PDFPreview = ({
   // Debounced zoom to prevent flickering
   const [zoomTimeout, setZoomTimeout] = useState(null);
 
-  // NEW: Show error overlay when compile errors exist
+  // NEW: Mobile header auto-hide scroll handler
+  useEffect(() => {
+    if (!isMobile) return;
+
+    const handleScroll = () => {
+      const currentScrollY = containerRef.current?.scrollTop || 0;
+      
+      // Show header when scrolling up, hide when scrolling down
+      if (currentScrollY < lastScrollY || currentScrollY < 50) {
+        setIsHeaderVisible(true);
+      } else if (currentScrollY > lastScrollY && currentScrollY > 100) {
+        setIsHeaderVisible(false);
+      }
+      
+      setLastScrollY(currentScrollY);
+      
+      // Clear existing timeout
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout);
+      }
+      
+      // Auto-show header after scroll stops
+      const newTimeout = setTimeout(() => {
+        setIsHeaderVisible(true);
+      }, 3000); // Show header 3 seconds after scroll stops
+      
+      setScrollTimeout(newTimeout);
+    };
+
+    const container = containerRef.current;
+    if (container) {
+      container.addEventListener('scroll', handleScroll, { passive: true });
+      return () => {
+        container.removeEventListener('scroll', handleScroll);
+        if (scrollTimeout) {
+          clearTimeout(scrollTimeout);
+        }
+      };
+    }
+  }, [isMobile, lastScrollY, scrollTimeout]);
+
+  // NEW: Auto-show header on user interaction
+  const handleUserInteraction = () => {
+    if (isMobile) {
+      setIsHeaderVisible(true);
+      
+      // Clear existing timeout
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout);
+      }
+      
+      // Auto-hide after 4 seconds of no interaction
+      const newTimeout = setTimeout(() => {
+        setIsHeaderVisible(false);
+      }, 4000);
+      
+      setScrollTimeout(newTimeout);
+    }
+  };
+
+  // Show error overlay when compile errors exist
   useEffect(() => {
     if (compileErrors && compileErrors.length > 0) {
       setShowErrorOverlay(true);
@@ -71,7 +141,7 @@ const PDFPreview = ({
       setError(null);
       setRenderedPages(new Map());
       setRenderingPages(new Set());
-      setShowErrorOverlay(false); // NEW: Hide error overlay when loading new PDF
+      setShowErrorOverlay(false); // Hide error overlay when loading new PDF
       
       try {
         const pdf = await window.pdfjsLib.getDocument(pdfUrl).promise;
@@ -113,7 +183,7 @@ const PDFPreview = ({
       const context = canvas.getContext('2d');
       
       // Calculate scale
-      const containerWidth = containerRef.current?.clientWidth || 800;
+      const containerWidth = containerRef.current?.clientWidth || (isMobile ? window.innerWidth - 32 : 800);
       const baseScale = Math.min(containerWidth * 0.85, 800) / page.getViewport({ scale: 1 }).width;
       const scale = baseScale * currentScale;
       
@@ -143,7 +213,7 @@ const PDFPreview = ({
         return newSet;
       });
     }
-  }, [pdfDocument, zoom, renderingPages, renderedPages]);
+  }, [pdfDocument, zoom, renderingPages, renderedPages, isMobile]);
 
   // Render visible pages with debouncing
   useEffect(() => {
@@ -186,8 +256,8 @@ const PDFPreview = ({
     setZoom(Math.max(25, Math.min(500, newZoom)));
   }, []);
 
-  const zoomIn = () => updateZoom(zoom + 25);
-  const zoomOut = () => updateZoom(zoom - 25);
+  const zoomIn = () => updateZoom(zoom + (isMobile ? 50 : 25));
+  const zoomOut = () => updateZoom(zoom - (isMobile ? 50 : 25));
   const resetZoom = () => updateZoom(100);
 
   // Page navigation
@@ -204,8 +274,10 @@ const PDFPreview = ({
     }
   };
 
-  // Handle mouse wheel zoom with proper event handling
+  // Handle mouse wheel zoom with proper event handling (desktop only)
   useEffect(() => {
+    if (isMobile) return; // Skip wheel zoom on mobile
+    
     const handleWheel = (e) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
@@ -225,7 +297,7 @@ const PDFPreview = ({
       container.addEventListener('wheel', handleWheel, { passive: false });
       return () => container.removeEventListener('wheel', handleWheel);
     }
-  }, [zoom, updateZoom]);
+  }, [zoom, updateZoom, isMobile]);
 
   // Scroll to current page
   useEffect(() => {
@@ -245,6 +317,277 @@ const PDFPreview = ({
     return canvasRefs.current.get(pageNum);
   };
 
+  // NEW: Mobile-specific rendering - FIXED TO REMOVE PREVIEW HEADER
+  if (isMobile) {
+    return (
+      <div className="bg-white h-full flex flex-col relative">
+        {/* Mobile Header - Only Navigation and Controls (No Preview Section) */}
+        <div className={`absolute top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 shadow-sm transition-transform duration-300 ease-in-out ${
+          isHeaderVisible ? 'translate-y-0' : '-translate-y-full'
+        }`}>
+          {/* Single Row: Back button, Navigation, Error, Status, and Zoom Controls */}
+          <div className="px-3 py-2 flex items-center justify-between">
+            {/* Left: Back button and Page Navigation */}
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={onMobileClose}
+                className="text-gray-600 hover:text-gray-800 transition-colors p-1 rounded-md hover:bg-gray-100"
+                title="Back to Editor"
+              >
+                <ArrowLeftIcon className="w-5 h-5" />
+              </button>
+              
+              {pdfDocument && totalPages > 0 && (
+                <div className="flex items-center space-x-1">
+                  <button
+                    onClick={() => {
+                      goToPreviousPage();
+                      handleUserInteraction();
+                    }}
+                    disabled={currentPage <= 1}
+                    className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-gray-600 transition-colors"
+                    title="Previous Page"
+                  >
+                    <ChevronLeftIcon className="w-4 h-4" />
+                  </button>
+                  
+                  <div className="flex items-center space-x-1">
+                    <input
+                      type="number"
+                      min="1"
+                      max={totalPages}
+                      value={currentPage}
+                      onChange={(e) => {
+                        setCurrentPage(parseInt(e.target.value) || 1);
+                        handleUserInteraction();
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          goToPage(e.target.value);
+                          handleUserInteraction();
+                        }
+                      }}
+                      onFocus={handleUserInteraction}
+                      className="w-12 px-1 py-0.5 text-center border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    />
+                    <span className="text-sm text-gray-600">/ {totalPages}</span>
+                  </div>
+                  
+                  <button
+                    onClick={() => {
+                      goToNextPage();
+                      handleUserInteraction();
+                    }}
+                    disabled={currentPage >= totalPages}
+                    className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-gray-600 transition-colors"
+                    title="Next Page"
+                  >
+                    <ChevronRightIcon className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+            
+            {/* Right: Error, Status, and Zoom Controls */}
+            <div className="flex items-center space-x-2">
+              {/* Mobile Error indicator */}
+              {compileErrors && compileErrors.length > 0 && (
+                <div className="flex items-center space-x-1">
+                  <ExclamationTriangleIcon className="w-4 h-4 text-red-500" />
+                  <span className="text-xs text-red-600 font-medium">
+                    {compileErrors.length}
+                  </span>
+                </div>
+              )}
+              
+              {/* Mobile Status */}
+              {(isCompiling || loading || renderingPages.size > 0) && (
+                <div className="flex items-center space-x-1">
+                  <div className="w-3 h-3 border border-blue-400 border-t-blue-600 rounded-full animate-spin"></div>
+                  <span className="text-xs text-blue-600">
+                    {isCompiling ? 'Compiling...' : loading ? 'Loading...' : 'Rendering...'}
+                  </span>
+                </div>
+              )}
+              
+              {/* Mobile Zoom Controls */}
+              {pdfDocument && (
+                <div className="flex items-center space-x-1">
+                  <button
+                    onClick={() => {
+                      zoomOut();
+                      handleUserInteraction();
+                    }}
+                    className="p-1 rounded hover:bg-gray-100 text-gray-600 transition-colors"
+                    title="Zoom Out"
+                  >
+                    <MagnifyingGlassMinusIcon className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      resetZoom();
+                      handleUserInteraction();
+                    }}
+                    className="px-2 py-0.5 text-xs rounded hover:bg-gray-100 text-gray-600 min-w-[45px] transition-colors"
+                    title="Reset Zoom"
+                  >
+                    {zoom}%
+                  </button>
+                  <button
+                    onClick={() => {
+                      zoomIn();
+                      handleUserInteraction();
+                    }}
+                    className="p-1 rounded hover:bg-gray-100 text-gray-600 transition-colors"
+                    title="Zoom In"
+                  >
+                    <MagnifyingGlassPlusIcon className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        
+        {/* Mobile PDF Content with reduced top padding */}
+        <div 
+          ref={containerRef}
+          className="flex-1 bg-white overflow-auto relative pt-14"
+          style={{ scrollBehavior: 'smooth' }}
+          onTouchStart={handleUserInteraction}
+          onTouchMove={handleUserInteraction}
+        >
+          {error ? (
+            <div className="flex items-center justify-center h-full p-6">
+              <div className="text-center">
+                <div className="w-20 h-20 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                  <DocumentTextIcon className="w-10 h-10 text-red-500" />
+                </div>
+                <p className="text-red-600 text-base mb-3 font-medium">Error loading PDF</p>
+                <p className="text-gray-500 text-sm">{error}</p>
+              </div>
+            </div>
+          ) : pdfDocument ? (
+            <div className="flex flex-col items-center py-8 space-y-6 px-4">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(pageNum => (
+                <div key={pageNum} className="relative w-full max-w-4xl">
+                  <canvas
+                    ref={ref => {
+                      if (ref) canvasRefs.current.set(pageNum, ref);
+                    }}
+                    className={`w-full shadow-lg border border-gray-200 bg-white ${
+                      currentPage === pageNum ? 'ring-4 ring-blue-300' : ''
+                    }`}
+                    style={{
+                      maxWidth: '100%',
+                      height: 'auto',
+                      borderRadius: '8px',
+                      display: 'block'
+                    }}
+                    onTouchStart={handleUserInteraction}
+                  />
+                  {renderingPages.has(pageNum) && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75 rounded-lg">
+                      <div className="flex items-center space-x-3 bg-white p-4 rounded-lg shadow-lg">
+                        <div className="w-5 h-5 border border-blue-400 border-t-blue-600 rounded-full animate-spin"></div>
+                        <span className="text-sm text-blue-600">Rendering page {pageNum}...</span>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Mobile Page Number Indicator */}
+                  <div className="absolute top-4 right-4 bg-black bg-opacity-60 text-white px-3 py-1 rounded-full text-sm font-medium">
+                    {pageNum}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-full p-6">
+              <div className="text-center">
+                <div className="w-20 h-20 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                  <DocumentTextIcon className="w-10 h-10 text-gray-400" />
+                </div>
+                <p className="text-gray-700 text-base mb-3 font-medium">
+                  {isCompiling ? 'Compiling LaTeX document...' : loading ? 'Loading PDF...' : 'PDF will appear here after compilation'}
+                </p>
+                <p className="text-gray-500 text-sm mb-6">
+                  {isCompiling ? 'Please wait...' : loading ? 'Please wait...' : 'Tap "Compile" to generate preview'}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Mobile Error Overlay */}
+          {showErrorOverlay && compileErrors && compileErrors.length > 0 && (
+            <div className="absolute inset-0 bg-black bg-opacity-30 flex items-center justify-center p-4 z-10">
+              <div className="bg-white rounded-2xl shadow-xl border border-red-200 max-w-lg w-full max-h-[80%] overflow-hidden">
+                {/* Mobile Error Header */}
+                <div className="bg-red-50 border-b border-red-200 px-6 py-4 flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <ExclamationTriangleIcon className="w-6 h-6 text-red-500" />
+                    <h3 className="text-lg font-semibold text-red-800">
+                      Compilation Failed
+                    </h3>
+                  </div>
+                  <button
+                    onClick={() => setShowErrorOverlay(false)}
+                    className="text-red-400 hover:text-red-600 transition-colors p-2 rounded-full hover:bg-red-100"
+                    title="Close error overlay"
+                  >
+                    <XMarkIcon className="w-5 h-5" />
+                  </button>
+                </div>
+                
+                {/* Mobile Error Content */}
+                <div className="p-6 max-h-80 overflow-y-auto">
+                  <div className="text-sm text-red-600 mb-4">
+                    {compileErrors.length} error{compileErrors.length !== 1 ? 's' : ''} found:
+                  </div>
+                  <div className="space-y-4">
+                    {compileErrors.map((error, index) => (
+                      <div key={index} className="bg-red-50 border border-red-200 rounded-lg p-4">
+                        <div className="flex items-start space-x-3">
+                          <div className="flex-shrink-0 w-6 h-6 bg-red-100 rounded-full flex items-center justify-center mt-0.5">
+                            <span className="text-red-700 text-sm font-medium">{index + 1}</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <pre className="text-sm text-red-800 font-mono whitespace-pre-wrap break-words">
+                              {error}
+                            </pre>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {/* Mobile Help Text */}
+                  <div className="mt-6 pt-4 border-t border-red-200">
+                    <p className="text-sm text-gray-600">
+                      <strong>Tip:</strong> Fix the errors in your LaTeX code and try compiling again. 
+                      Common issues include missing packages, unclosed braces, or syntax errors.
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Mobile Footer */}
+                <div className="bg-gray-50 border-t border-gray-200 px-6 py-4 flex justify-end">
+                  <button
+                    onClick={() => setShowErrorOverlay(false)}
+                    className="px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium rounded-lg transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // DESKTOP LAYOUT (unchanged from original)
   return (
     <div className="bg-white border-l border-gray-300 flex flex-col relative" style={{ width: `${editorWidth}%` }}>
       {/* Header with controls */}
@@ -313,7 +656,7 @@ const PDFPreview = ({
           </div>
           
           <div className="flex items-center space-x-3">
-            {/* NEW: Error indicator in header */}
+            {/* Error indicator in header */}
             {compileErrors && compileErrors.length > 0 && (
               <div className="flex items-center space-x-2">
                 <ExclamationTriangleIcon className="w-4 h-4 text-red-500" />
@@ -427,7 +770,7 @@ const PDFPreview = ({
           </div>
         )}
 
-        {/* NEW: Translucent Error Overlay */}
+        {/* Translucent Error Overlay */}
         {showErrorOverlay && compileErrors && compileErrors.length > 0 && (
           <div className="absolute inset-0 bg-black bg-opacity-20 flex items-center justify-center p-4 z-10">
             <div className="bg-white bg-opacity-95 backdrop-blur-sm rounded-lg shadow-xl border border-red-200 max-w-2xl w-full max-h-[80%] overflow-hidden">

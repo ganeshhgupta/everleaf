@@ -10,7 +10,17 @@ import {
   ArrowPathIcon as RotateCcw 
 } from '@heroicons/react/24/outline';
 
-const DocumentUpload = ({ projectId, onDocumentsUploaded, documents = [], onDeleteDocument, onReprocessDocument }) => {
+const DocumentUpload = ({ 
+  projectId, 
+  onDocumentsUploaded, 
+  documents = [], 
+  onDeleteDocument, 
+  onReprocessDocument,
+  // NEW: Mobile-specific props (optional)
+  isMobile,
+  mobileLeftPanelOpen,
+  onMobileClose
+}) => {
   const { api } = useAuth();
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -278,7 +288,7 @@ const DocumentUpload = ({ projectId, onDocumentsUploaded, documents = [], onDele
     }
   }, []);
 
-  // NEW: Enhanced uploadFromUrls function with CORS proxy support
+  // Enhanced uploadFromUrls function with CORS proxy support (unchanged)
   const uploadFromUrls = async () => {
     const validUrls = urls.filter(url => url.trim());
     
@@ -470,6 +480,266 @@ const DocumentUpload = ({ projectId, onDocumentsUploaded, documents = [], onDele
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+  // NEW: Mobile-specific rendering
+  if (isMobile) {
+    return (
+      <div className="bg-white h-full flex flex-col">
+        {/* Mobile Header */}
+        <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center space-x-2">
+            <FileText className="w-5 h-5 text-gray-600" />
+            <span className="text-lg font-semibold text-gray-900">Reference Documents</span>
+            {documents.length > 0 && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                {documents.length}
+              </span>
+            )}
+          </div>
+          {documents.filter(d => d.processingStatus === 'completed').length > 0 && (
+            <div className="w-3 h-3 bg-green-500 rounded-full" title="RAG Ready" />
+          )}
+        </div>
+
+        {/* Mobile Upload Actions */}
+        <div className="p-4 space-y-4 flex-shrink-0">
+          <div className="grid grid-cols-2 gap-4">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className={`flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-lg text-sm font-medium transition-all ${
+                dragActive 
+                  ? 'border-blue-400 bg-blue-50 text-blue-700' 
+                  : 'border-gray-300 text-gray-700 bg-white hover:border-gray-400 hover:bg-gray-50'
+              } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed`}
+              onDragEnter={handleDrag}
+              onDragLeave={handleDrag}
+              onDragOver={handleDrag}
+              onDrop={handleDrop}
+            >
+              <Upload className="w-8 h-8 mb-3" />
+              <span className="font-medium text-base">
+                {dragActive ? 'Drop files here' : 'Upload PDF'}
+              </span>
+              <span className="text-xs text-gray-500 mt-1">Tap to browse</span>
+            </button>
+            <button
+              onClick={() => setShowUrlDialog(true)}
+              disabled={uploading}
+              className="flex flex-col items-center justify-center p-6 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <Link className="w-8 h-8 mb-3" />
+              <span className="font-medium text-base">Add Links</span>
+              <span className="text-xs text-gray-500 mt-1">From URLs</span>
+            </button>
+          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept=".pdf"
+            onChange={handleFileInputChange}
+            className="hidden"
+          />
+        </div>
+
+        {/* Mobile Document List */}
+        {documents.length > 0 && (
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div className="text-sm font-medium text-gray-700 mb-3">
+              Documents ({documents.length})
+            </div>
+            {documents.map((doc) => (
+              <div
+                key={doc.id}
+                className={`p-4 rounded-lg border transition-all duration-200 ${
+                  doc.processingStatus === 'completed' 
+                    ? 'bg-green-50 border-green-200' 
+                    : doc.processingStatus === 'processing'
+                    ? 'bg-blue-50 border-blue-200'
+                    : doc.processingStatus === 'failed'
+                    ? 'bg-red-50 border-red-200'
+                    : 'bg-gray-50 border-gray-200'
+                }`}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start space-x-3 flex-1 min-w-0">
+                    {getStatusIcon(doc.processingStatus)}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-gray-900 truncate">
+                        {doc.originalFilename || 'Untitled Document'}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1 space-y-1">
+                        <div>{formatFileSize(doc.fileSize)}</div>
+                        {doc.chunkCount && doc.chunkCount > 0 && (
+                          <div>{doc.chunkCount} chunks</div>
+                        )}
+                        {doc.uploadType === 'url' && (
+                          <div className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                            URL
+                          </div>
+                        )}
+                      </div>
+                      {doc.errorMessage && (
+                        <div className="text-xs text-red-600 mt-2">
+                          {doc.errorMessage}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2 ml-3">
+                    {doc.processingStatus === 'failed' && (
+                      <button
+                        onClick={() => onReprocessDocument && onReprocessDocument(doc.id)}
+                        className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+                        title="Reprocess"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDeleteDocument(doc)}
+                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                      title="Delete"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Mobile URL Dialog */}
+        {showUrlDialog && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end justify-center z-50 p-0">
+            <div className="bg-white rounded-t-xl shadow-xl w-full max-h-[90vh] overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900">Upload from URLs</h3>
+                  <button
+                    onClick={() => setShowUrlDialog(false)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors p-2"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <p className="text-sm text-gray-500 mt-2">
+                  Downloads PDFs via CORS proxy with automatic fallback
+                </p>
+              </div>
+              
+              <div className="px-6 py-4 max-h-96 overflow-y-auto">
+                <div className="space-y-4">
+                  {urls.map((url, index) => (
+                    <div key={index} className="flex items-center space-x-3">
+                      <input
+                        type="url"
+                        value={url}
+                        onChange={(e) => updateUrl(index, e.target.value)}
+                        placeholder="https://arxiv.org/pdf/2009.08020"
+                        className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      />
+                      {urls.length > 1 && (
+                        <button
+                          onClick={() => removeUrl(index)}
+                          className="p-3 text-gray-400 hover:text-red-600 transition-colors"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                
+                <div className="flex items-center justify-between mt-6">
+                  <button
+                    onClick={addUrlField}
+                    disabled={urls.length >= 10}
+                    className="text-sm text-blue-600 hover:text-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                  >
+                    + Add another URL
+                  </button>
+                  <span className="text-xs text-gray-500">
+                    {urls.length}/10 URLs
+                  </span>
+                </div>
+              </div>
+              
+              <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowUrlDialog(false)}
+                  className="px-6 py-3 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={uploadFromUrls}
+                  disabled={uploading || urls.every(url => !url.trim())}
+                  className="px-6 py-3 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {uploading ? 'Downloading...' : 'Upload'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Mobile Delete Confirmation Dialog */}
+        {showDeleteDialog && documentToDelete && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900">Delete Document</h3>
+              </div>
+              
+              <div className="px-6 py-4">
+                <div className="flex items-start space-x-3">
+                  <div className="flex-shrink-0">
+                    <AlertCircle className="w-6 h-6 text-red-600" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-gray-900 mb-3">
+                      Are you sure you want to delete this document? This will also remove all embeddings.
+                    </p>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <div className="text-sm font-medium text-gray-900 truncate">
+                        {documentToDelete.originalFilename || 'Untitled Document'}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {formatFileSize(documentToDelete.fileSize)}
+                        {documentToDelete.chunkCount && documentToDelete.chunkCount > 0 && (
+                          <span> • {documentToDelete.chunkCount} chunks</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end space-x-3 rounded-b-xl">
+                <button
+                  onClick={cancelDeleteDocument}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteDocument}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // DESKTOP LAYOUT (unchanged from original)
   return (
     <div className="bg-white border-t border-gray-200">
       {/* Header */}
@@ -675,8 +945,6 @@ const DocumentUpload = ({ projectId, onDocumentsUploaded, documents = [], onDele
                   {urls.length}/10 URLs
                 </span>
               </div>
-
-
             </div>
             
             <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end space-x-3 rounded-b-lg">
