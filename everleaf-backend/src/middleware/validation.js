@@ -171,6 +171,43 @@ const validateCollaborationInvite = [
   handleValidationErrors
 ];
 
+// NEW: Share project validation
+const validateShareProject = [
+  body('emails')
+    .isArray({ min: 1 })
+    .withMessage('Emails must be an array with at least one email address'),
+  
+  body('emails.*')
+    .isEmail()
+    .normalizeEmail()
+    .withMessage('All emails must be valid email addresses'),
+  
+  body('permission')
+    .optional()
+    .isIn(['view', 'edit', 'editor'])
+    .withMessage('Permission must be either view, edit, or editor'),
+  
+  // Custom validation to normalize "editor" to "edit"
+  (req, res, next) => {
+    if (req.body.permission === 'editor') {
+      req.body.permission = 'edit';
+    }
+    next();
+  },
+  
+  handleValidationErrors
+];
+
+// NEW: Create share link validation
+const validateCreateShareLink = [
+  body('permission')
+    .optional()
+    .isIn(['view', 'edit'])
+    .withMessage('Permission must be either view or edit'),
+  
+  handleValidationErrors
+];
+
 // User profile update validation
 const validateProfileUpdate = [
   body('firstName')
@@ -239,5 +276,8 @@ module.exports = {
   validateCollaborationInvite,
   validateProfileUpdate,
   validateSearch,
-  validateId
+  validateId,
+  // NEW: Sharing validation exports
+  validateShareProject,
+  validateCreateShareLink
 };

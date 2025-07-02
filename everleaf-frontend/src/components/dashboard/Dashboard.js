@@ -344,7 +344,17 @@ Hello Hello Hello :)
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-600 rounded-lg flex items-center justify-center">
+                <img 
+                  src="/everleaf_logo.png" 
+                  alt="Everleaf" 
+                  className="w-8 h-8 rounded-lg"
+                  onError={(e) => {
+                    // Fallback to gradient background with icon if image fails
+                    e.target.style.display = 'none';
+                    e.target.nextElementSibling.style.display = 'flex';
+                  }}
+                />
+                <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-600 rounded-lg flex items-center justify-center" style={{ display: 'none' }}>
                   <AcademicCapIcon className="w-5 h-5 text-white" />
                 </div>
                 <span className="text-xl font-bold text-gray-900">Everleaf</span>
@@ -484,6 +494,38 @@ Hello Hello Hello :)
                     <span>Sign out</span>
                   </button>
                 </nav>
+                
+                {/* Early Stage Notice */}
+                <div className="mt-6 pt-6 border-t border-gray-200">
+                  <div className="text-sm text-gray-500 leading-relaxed">
+                    <p className="mb-3">
+                      This project is still in its early stages, so some features may not be fully functional yet. I'm working on improving them soon. If you encounter any issues, especially with the RAG or AI editing, or if you have any suggestions, I'd love to hear your feedback!
+                    </p>
+                    <div className="flex items-center space-x-3">
+                      <a 
+                        href="https://www.linkedin.com/in/ganeshhgupta" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center space-x-2 text-blue-600 hover:text-blue-700 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.338 16.338H13.67V12.16c0-.995-.017-2.277-1.387-2.277-1.39 0-1.601 1.086-1.601 2.207v4.248H8.014v-8.59h2.559v1.174h.037c.356-.675 1.227-1.387 2.526-1.387 2.703 0 3.203 1.778 3.203 4.092v4.711zM5.005 6.575a1.548 1.548 0 11-.003-3.096 1.548 1.548 0 01.003 3.096zm-1.337 9.763H6.34v-8.59H3.667v8.59zM17.668 1H2.328C1.595 1 1 1.581 1 2.298v15.403C1 18.418 1.595 19 2.328 19h15.34c.734 0 1.332-.582 1.332-1.299V2.298C19 1.581 18.402 1 17.668 1z" clipRule="evenodd" />
+                        </svg>
+                        <span className="text-xs">LinkedIn</span>
+                      </a>
+                      
+                      <a 
+                        href="mailto:iamgs10rk@gmail.com"
+                        className="inline-flex items-center space-x-2 text-gray-600 hover:text-gray-700 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                        <span className="text-xs">Email</span>
+                      </a>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </motion.div>

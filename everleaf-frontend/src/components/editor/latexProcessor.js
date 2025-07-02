@@ -1,4 +1,4 @@
-// latexProcessor.js
+// latexProcessor.js - FIXED VERSION WITH NATURAL LANGUAGE PROMPTS
 // Advanced LaTeX processing utilities with structured parsing
 
 /**
@@ -180,25 +180,33 @@ export class LaTeXParser {
 }
 
 /**
- * PHASE 2: Intent Recognition Layer
+ * PHASE 2: Intent Recognition Layer - FIXED VERSION
  */
 
 export const detectUserAction = (prompt) => {
   const promptLower = prompt.toLowerCase().trim();
   
-  // Delete/remove actions
+  // FIXED: Detect "write/create" actions FIRST - should be 'add', not 'improve'
+  if (promptLower.startsWith('write') || promptLower.startsWith('create') || 
+      promptLower.includes('write a') || promptLower.includes('write an') ||
+      promptLower.includes('create a') || promptLower.includes('create an')) {
+    return 'add';
+  }
+  
+  // Delete/remove actions - HIGH PRIORITY
   if (promptLower.includes('delete') || promptLower.includes('remove') || 
       promptLower.includes('clear') || promptLower.includes('get rid of')) {
     return 'delete';
   }
   
   // Replace/rewrite actions
-  if (promptLower.includes('make') && (promptLower.includes('just') || promptLower.includes('only'))) {
+  if (promptLower.includes('replace') || promptLower.includes('rewrite') || 
+      promptLower.includes('change to') || promptLower.includes('should be')) {
     return 'replace';
   }
   
-  if (promptLower.includes('replace') || promptLower.includes('rewrite') || 
-      promptLower.includes('change to') || promptLower.includes('should be')) {
+  // FIXED: "make" should only be replace if it's very specific
+  if (promptLower.includes('make') && (promptLower.includes('just') || promptLower.includes('only'))) {
     return 'replace';
   }
   
@@ -208,9 +216,9 @@ export const detectUserAction = (prompt) => {
     return 'expand';
   }
   
-  // Add/insert actions
+  // Add/insert actions (but not if it starts with "write" or "create" - already handled above)
   if (promptLower.includes('add') || promptLower.includes('insert') || 
-      promptLower.includes('include') || promptLower.includes('create')) {
+      promptLower.includes('include')) {
     return 'add';
   }
   
@@ -220,7 +228,7 @@ export const detectUserAction = (prompt) => {
     return 'fix';
   }
   
-  // Default to improve
+  // Default to improve for vague requests
   return 'improve';
 };
 
@@ -250,13 +258,22 @@ export const SECTION_KEYWORDS = [
   'acknowledgments', 'acknowledgements', 'appendix'
 ];
 
+// ENHANCED: Better section extraction that handles creation vs modification
 export const extractTargetSection = (prompt) => {
   const promptLower = prompt.toLowerCase().trim();
+  
+  // Check if this is a creation request (write/create + section name)
+  const isCreationRequest = promptLower.startsWith('write') || promptLower.startsWith('create') ||
+                           promptLower.includes('write a') || promptLower.includes('write an') ||
+                           promptLower.includes('create a') || promptLower.includes('create an');
   
   // Try to find section keywords in the prompt
   for (const keyword of SECTION_KEYWORDS) {
     if (promptLower.includes(keyword)) {
       console.log(`🎯 Detected target section: "${keyword}"`);
+      
+      // FIXED: If it's a creation request and we don't have this section, 
+      // we should still return the section name for proper handling
       return keyword;
     }
   }
@@ -264,8 +281,33 @@ export const extractTargetSection = (prompt) => {
   return null;
 };
 
+// NEW: Helper function to determine if this is a creation request
+export const shouldCreateNewSection = (prompt, document, targetSection) => {
+  const promptLower = prompt.toLowerCase().trim();
+  
+  // If prompt starts with "write" or "create", it's likely a creation request
+  const isCreationLanguage = promptLower.startsWith('write') || promptLower.startsWith('create') ||
+                            promptLower.includes('write a') || promptLower.includes('write an') ||
+                            promptLower.includes('create a') || promptLower.includes('create an');
+  
+  if (!isCreationLanguage) {
+    return false;
+  }
+  
+  // If we have a target section, check if it exists in the document
+  if (targetSection) {
+    const parser = new LaTeXParser(document);
+    const sectionExists = parser.findSection(targetSection) !== null;
+    
+    // If section doesn't exist and user wants to "write" it, this is creation
+    return !sectionExists;
+  }
+  
+  return isCreationLanguage;
+};
+
 /**
- * PHASE 3: Content Generation Pipeline
+ * PHASE 3: Content Generation Pipeline - FIXED PROMPTS WITH NATURAL LANGUAGE
  */
 
 export const createEnhancedPrompt = (userMessage, selectedText, editorContext, targetSection, action, insertionPoint) => {
@@ -276,21 +318,21 @@ export const createEnhancedPrompt = (userMessage, selectedText, editorContext, t
     
     switch (action) {
       case 'delete':
-        return `Delete this selected LaTeX code completely. Return just an empty string or comment:
+        return `Please delete this selected LaTeX code. Just respond with "I've deleted the selected content" to confirm:
 
 \`\`\`latex
 ${selectedText}
 \`\`\`
 
-IMPORTANT: If you want to delete this content, respond with just "% Content deleted" or an empty response.`;
+User request: ${userMessage}`;
 
       case 'replace':
-        actionInstruction = 'Replace this selected LaTeX code with the requested content. Return ONLY the replacement code, not the original.';
+        actionInstruction = 'Replace this selected LaTeX code with the requested content. Provide only the replacement code.';
         break;
         
       case 'expand':
       case 'add':
-        actionInstruction = 'Generate ONLY the new content to add. Do NOT include the existing content.';
+        actionInstruction = 'Add new content to enhance this section. Provide only the new content to add.';
         break;
         
       default:
@@ -304,9 +346,9 @@ Selected LaTeX code:
 ${selectedText}
 \`\`\`
 
-Request: ${userMessage}
+User request: ${userMessage}
 
-IMPORTANT: Only provide the corrected/improved version of the selected code. Do NOT include \\documentclass, \\begin{document}, or \\end{document}. Just the specific code I selected.`;
+Please provide clean LaTeX code without \\documentclass, \\begin{document}, or \\end{document}. Focus only on the specific improvement requested.`;
   }
   
   // Handle section-specific requests
@@ -314,31 +356,43 @@ IMPORTANT: Only provide the corrected/improved version of the selected code. Do 
     const parser = new LaTeXParser(editorContext);
     const boundaries = parser.findSection(targetSection);
     
+    // ENHANCED: Handle section creation vs modification
+    if (!boundaries && (action === 'add' || shouldCreateNewSection(userMessage, editorContext, targetSection))) {
+      // NEW SECTION CREATION - NATURAL LANGUAGE PROMPT
+      return `Please create a new ${targetSection} section for an academic document.
+
+User request: ${userMessage}
+
+Write a complete section starting with \\section{${targetSection.charAt(0).toUpperCase() + targetSection.slice(1)}} followed by well-structured content. Make it comprehensive and professional.
+
+Respond naturally as if you're helping a colleague write their paper. Don't include \\documentclass or document structure - just the section.`;
+    }
+    
     if (boundaries) {
       let actionInstruction = '';
       
       switch (action) {
         case 'delete':
-          return `Confirm deletion of the ${targetSection} section.
+          return `The user wants to delete the ${targetSection} section. Please respond with "I've deleted the ${targetSection} section" to confirm deletion.
 
 Current ${targetSection} section:
 \`\`\`latex
 ${boundaries.originalContent.substring(0, 200)}...
 \`\`\`
 
-IMPORTANT: To confirm deletion, respond with just "% ${targetSection} section deleted" or "CONFIRMED_DELETE".`;
+User request: ${userMessage}`;
 
         case 'replace':
-          actionInstruction = `Replace the entire ${targetSection} section with new content as requested. Return the complete section with \\section{} header.`;
+          actionInstruction = `Please rewrite the entire ${targetSection} section based on the user's request. Provide the complete section with \\section{} header.`;
           break;
           
         case 'expand':
         case 'add':
-          actionInstruction = `Generate ONLY the new content to add to the ${insertionPoint} of the ${targetSection} section. Do NOT include section headers or existing content.`;
+          actionInstruction = `Please provide additional content to add to the ${insertionPoint} of the ${targetSection} section. Provide only the new content, not the existing text.`;
           break;
           
         default:
-          actionInstruction = `Improve the ${targetSection} section.`;
+          actionInstruction = `Please improve the ${targetSection} section based on the user's request.`;
       }
       
       return `${actionInstruction}
@@ -348,24 +402,18 @@ Current ${targetSection} section:
 ${boundaries.originalContent}
 \`\`\`
 
-Request: ${userMessage}
+User request: ${userMessage}
 
-CRITICAL INSTRUCTIONS: 
 ${action === 'expand' || action === 'add'
-  ? '- Provide ONLY the new content to be added (no section header, no existing content)'
-  : '- Return the COMPLETE modified section with \\section{} header'
+  ? 'Provide only the new content to be added - no section header or existing content.'
+  : 'Provide the complete improved section with \\section{} header.'
 }
-- Do NOT include \\documentclass, \\begin{document}, or \\end{document}
-- Do NOT add any other sections or extra content
-- Maintain proper LaTeX formatting and syntax
-${action === 'expand' || action === 'add'
-  ? '- Format: Just the new sentence(s) or content to append'
-  : '- Format: Complete section with all content'
-}`;
+
+Respond in a natural, helpful way as if you're assisting a colleague with their document.`;
     }
   }
   
-  // Default handling
+  // Default handling - NATURAL LANGUAGE
   return `${userMessage}
 
 Current document context:
@@ -373,7 +421,7 @@ Current document context:
 ${editorContext.slice(-1000)}
 \`\`\`
 
-IMPORTANT: My document already has proper structure. Provide working LaTeX code that fits into my existing document. Do NOT include \\documentclass, \\begin{document}, or \\end{document} unless specifically requested.`;
+Please help improve this LaTeX document. Provide clean LaTeX code that fits naturally into the existing structure. Respond conversationally and helpfully.`;
 };
 
 /**
@@ -535,8 +583,9 @@ export const smartApplyCode = (code, prompt, editorContext, selectedText, select
     
     // Handle deletion of specific sections
     if (action === 'delete') {
-      if (code.includes('CONFIRMED_DELETE') || code.includes('deleted')) {
-        console.log('🗑️ Confirmed deletion - removing section');
+      // Check for natural deletion confirmation
+      if (code.toLowerCase().includes("i've deleted") || code.toLowerCase().includes("deleted the")) {
+        console.log('🗑️ Natural deletion confirmation - removing section');
         const result = deleteSection(editorContext, targetSection);
         
         if (result) {
@@ -548,38 +597,58 @@ export const smartApplyCode = (code, prompt, editorContext, selectedText, select
       return false;
     }
     
-    // Handle adding content to existing sections
+    // Handle adding content to existing sections OR creating new sections
     if (action === 'add' || action === 'expand') {
-      console.log('➕ Adding content to existing section');
+      console.log('➕ Adding content to existing section or creating new section');
       
       // Clean the code - remove section headers if AI included them
       let cleanContent = code.trim();
       
-      // Remove section header if present
-      const sectionHeaderRegex = new RegExp(`\\\\section\\*?\\{[^}]*\\}`, 'i');
-      if (cleanContent.match(sectionHeaderRegex)) {
-        cleanContent = cleanContent.replace(sectionHeaderRegex, '').trim();
-        console.log('✂️ Removed section header from AI response');
-      }
+      // Check if section exists
+      const parser = new LaTeXParser(editorContext);
+      const sectionExists = parser.findSection(targetSection) !== null;
       
-      // Use document reconstruction to add content
-      const result = addContentToSection(editorContext, targetSection, cleanContent, insertionPoint);
-      
-      if (result) {
-        console.log('✅ Reconstructing entire document with new content');
-        console.log(`🔧 Full document replacement:`);
-        console.log(`   Original length: ${editorContext.length}`);
-        console.log(`   New length: ${result.newDocument.length}`);
+      if (sectionExists) {
+        // Remove section header if present for existing sections
+        const sectionHeaderRegex = new RegExp(`\\\\section\\*?\\{[^}]*\\}`, 'i');
+        if (cleanContent.match(sectionHeaderRegex)) {
+          cleanContent = cleanContent.replace(sectionHeaderRegex, '').trim();
+          console.log('✂️ Removed section header from AI response for existing section');
+        }
         
-        // Use full document replacement
-        onApplyText(result.newDocument, { start: 0, end: editorContext.length });
+        // Use document reconstruction to add content
+        const result = addContentToSection(editorContext, targetSection, cleanContent, insertionPoint);
         
-        return true;
+        if (result) {
+          console.log('✅ Reconstructing entire document with new content');
+          onApplyText(result.newDocument, { start: 0, end: editorContext.length });
+          return true;
+        }
       } else {
-        console.log('❌ Failed to reconstruct document, falling back to cursor insertion');
-        onApplyText(cleanContent, null);
+        // NEW SECTION CREATION - keep section header
+        console.log('🆕 Creating new section');
+        
+        // For new sections, the AI should have provided complete section with header
+        // Use the code as-is (it should already have proper formatting from enhanced prompt)
+        
+        // Insert new section before \end{document} or at end
+        const endDocMatch = editorContext.match(/\\end\{document\}/);
+        if (endDocMatch) {
+          const insertPos = editorContext.indexOf(endDocMatch[0]);
+          const before = editorContext.substring(0, insertPos).trimEnd();
+          const after = editorContext.substring(insertPos);
+          const newDocument = before + '\n\n' + cleanContent + '\n\n' + after;
+          onApplyText(newDocument, { start: 0, end: editorContext.length });
+        } else {
+          const newDocument = editorContext.trimEnd() + '\n\n' + cleanContent;
+          onApplyText(newDocument, { start: 0, end: editorContext.length });
+        }
         return true;
       }
+      
+      console.log('❌ Failed to add content, falling back to cursor insertion');
+      onApplyText(cleanContent, null);
+      return true;
     }
     
     // Handle section replacement
@@ -597,7 +666,7 @@ export const smartApplyCode = (code, prompt, editorContext, selectedText, select
   
   // Handle general deletion requests
   if (action === 'delete') {
-    if (code.trim() === '' || code.includes('% Content deleted') || code.includes('deleted')) {
+    if (code.toLowerCase().includes("i've deleted") || code.toLowerCase().includes("deleted") || code.trim() === '') {
       if (selectedText) {
         console.log('🗑️ Deleting selected text');
         onApplyText('', selectionRange);

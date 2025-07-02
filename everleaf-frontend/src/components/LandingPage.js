@@ -94,9 +94,11 @@ const LandingPage = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-600 rounded-lg flex items-center justify-center">
-                <AcademicCapIcon className="w-5 h-5 text-white" />
-              </div>
+                              <img 
+    src="/logo512.png" 
+    alt="Everleaf" 
+    className="w-8 h-8 rounded-lg"
+  />
               <span className="text-2xl font-bold text-gray-900">Everleaf</span>
             </div>
             
@@ -449,9 +451,11 @@ const LandingPage = () => {
           <div className="grid md:grid-cols-3 gap-8">
             <div>
               <div className="flex items-center space-x-2 mb-4">
-                <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-600 rounded-lg flex items-center justify-center">
-                  <AcademicCapIcon className="w-5 h-5 text-white" />
-                </div>
+                                <img 
+    src="/logo512.png" 
+    alt="Everleaf" 
+    className="w-8 h-8 rounded-lg"
+  />
                 <span className="text-xl font-bold">Everleaf</span>
               </div>
               <p className="text-gray-400">

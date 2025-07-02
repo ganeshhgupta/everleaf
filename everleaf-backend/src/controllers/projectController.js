@@ -1,6 +1,8 @@
 const Project = require('../models/Project');
 const User = require('../models/User');
 const { logActivity } = require('../utils/activityLogger');
+const { sendCollaborationInvite, sendShareNotification } = require('../utils/email');
+const crypto = require('crypto');
 
 // Create a new project
 const createProject = async (req, res) => {
@@ -216,6 +218,241 @@ const deleteProject = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to delete project'
+    });
+  }
+};
+
+// Share project via email (NEW)
+const shareProject = async (req, res) => {
+  try {
+    const projectId = req.params.id;
+    const { emails, permission = 'edit' } = req.body;
+
+    // Check if user is project owner or admin
+    const accessLevel = await Project.checkAccess(projectId, req.user.id);
+    if (accessLevel !== 'owner' && accessLevel !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only project owners and admins can share projects'
+      });
+    }
+
+    // Get project details
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        message: 'Project not found'
+      });
+    }
+
+    // Get current user details
+    const currentUser = await User.findById(req.user.id);
+    
+    const successfulInvites = [];
+    const failedInvites = [];
+
+    // Process each email
+    for (const email of emails) {
+      try {
+        // Check if user exists
+        let collaborator = await User.findByEmail(email);
+        
+        if (!collaborator) {
+          // User doesn't exist - send invitation to join platform
+          await sendShareNotification(
+            email, 
+            project.title, 
+            `${currentUser.first_name} ${currentUser.last_name}`,
+            projectId,
+            'new_user'
+          );
+          successfulInvites.push({ email, status: 'invited_new_user' });
+        } else {
+          // Check if user is trying to add themselves
+          if (collaborator.id === req.user.id) {
+            failedInvites.push({ email, error: 'Cannot add yourself as collaborator' });
+            continue;
+          }
+
+          // Check if already a collaborator
+          const existingCollaboration = await Project.getCollaboratorByUserId(projectId, collaborator.id);
+          if (existingCollaboration) {
+            failedInvites.push({ email, error: 'User is already a collaborator' });
+            continue;
+          }
+
+          // Add as collaborator
+          await Project.addCollaborator(projectId, collaborator.id, req.user.id, permission);
+          
+          // Send notification email
+          await sendCollaborationInvite(
+            email,
+            project.title,
+            `${currentUser.first_name} ${currentUser.last_name}`,
+            projectId
+          );
+          
+          successfulInvites.push({ 
+            email, 
+            status: 'added_collaborator',
+            user: {
+              id: collaborator.id,
+              firstName: collaborator.first_name,
+              lastName: collaborator.last_name,
+              email: collaborator.email
+            }
+          });
+        }
+      } catch (emailError) {
+        console.error(`Failed to process email ${email}:`, emailError);
+        failedInvites.push({ email, error: 'Failed to send invitation' });
+      }
+    }
+
+    // Log activity
+    await logActivity(req.user.id, projectId, 'project_shared', {
+      emails: successfulInvites.map(invite => invite.email),
+      permission,
+      successCount: successfulInvites.length,
+      failCount: failedInvites.length
+    }, req.ip, req.get('User-Agent'));
+
+    res.json({
+      success: true,
+      message: `Successfully processed ${successfulInvites.length} invitations`,
+      results: {
+        successful: successfulInvites,
+        failed: failedInvites
+      }
+    });
+
+  } catch (error) {
+    console.error('Share project error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to share project'
+    });
+  }
+};
+
+// Create shareable link (NEW)
+const createShareLink = async (req, res) => {
+  try {
+    const projectId = req.params.id;
+    const { permission = 'view' } = req.body;
+
+    // Check if user is project owner or admin
+    const accessLevel = await Project.checkAccess(projectId, req.user.id);
+    if (accessLevel !== 'owner' && accessLevel !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only project owners and admins can create share links'
+      });
+    }
+
+    // Generate unique share token
+    const shareToken = crypto.randomBytes(32).toString('hex');
+    
+    // Save share link to database
+    const shareLink = await Project.createShareLink(projectId, shareToken, permission, req.user.id);
+    
+    // Log activity
+    await logActivity(req.user.id, projectId, 'share_link_created', {
+      permission,
+      shareToken: shareToken.substring(0, 8) + '...' // Log partial token for security
+    }, req.ip, req.get('User-Agent'));
+
+    const fullShareLink = `${process.env.FRONTEND_URL}/shared/${shareToken}`;
+
+    res.json({
+      success: true,
+      message: 'Share link created successfully',
+      shareLink: fullShareLink,
+      permission,
+      expiresAt: shareLink.expires_at
+    });
+
+  } catch (error) {
+    console.error('Create share link error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create share link'
+    });
+  }
+};
+
+// Get existing share link (NEW)
+const getShareLink = async (req, res) => {
+  try {
+    const projectId = req.params.id;
+
+    // Check if user is project owner or admin
+    const accessLevel = await Project.checkAccess(projectId, req.user.id);
+    if (accessLevel !== 'owner' && accessLevel !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only project owners and admins can view share links'
+      });
+    }
+
+    const shareLink = await Project.getActiveShareLink(projectId);
+    
+    if (!shareLink) {
+      return res.json({
+        success: true,
+        shareLink: null
+      });
+    }
+
+    const fullShareLink = `${process.env.FRONTEND_URL}/shared/${shareLink.share_token}`;
+
+    res.json({
+      success: true,
+      shareLink: fullShareLink,
+      permission: shareLink.permission,
+      expiresAt: shareLink.expires_at,
+      createdAt: shareLink.created_at
+    });
+
+  } catch (error) {
+    console.error('Get share link error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get share link'
+    });
+  }
+};
+
+// Disable share link (NEW)
+const disableShareLink = async (req, res) => {
+  try {
+    const projectId = req.params.id;
+
+    // Check if user is project owner or admin
+    const accessLevel = await Project.checkAccess(projectId, req.user.id);
+    if (accessLevel !== 'owner' && accessLevel !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only project owners and admins can disable share links'
+      });
+    }
+
+    await Project.disableShareLink(projectId);
+    
+    // Log activity
+    await logActivity(req.user.id, projectId, 'share_link_disabled', null, req.ip, req.get('User-Agent'));
+
+    res.json({
+      success: true,
+      message: 'Share link disabled successfully'
+    });
+
+  } catch (error) {
+    console.error('Disable share link error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to disable share link'
     });
   }
 };
@@ -526,6 +763,10 @@ module.exports = {
   getProject,
   updateProject,
   deleteProject,
+  shareProject,
+  createShareLink,
+  getShareLink,
+  disableShareLink,
   addCollaborator,
   acceptCollaboration,
   removeCollaborator,

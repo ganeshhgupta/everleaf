@@ -1,9 +1,8 @@
-// LaTeXEditor.js - ChatPanel expands to the left
+// LaTeXEditor.js - COMPLETE UPDATED VERSION WITH NATURAL LANGUAGE RESPONSES
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-//import { projectAPI, documentAPI } from '../../services/api';
 import Toolbar from './Toolbar';
 import FileTree from './FileTree';
 import EditorPanel from './EditorPanel';
@@ -12,6 +11,10 @@ import ChatPanel from './ChatPanel';
 import DocumentUpload from './DocumentUpload';
 import useResizeObserverFix from '../../hooks/useResizeObserverFix';
 import { sampleLatex, sampleBibliography, getSampleChapterContent } from '../../utils/latexUtils';
+import Collaborator from './Collaborator';
+
+// NEW: Import surgical editing service
+import SurgicalEditingService from './SurgicalEditingService';
 
 const LaTeXEditor = () => {
   const { api } = useAuth();
@@ -48,14 +51,13 @@ const LaTeXEditor = () => {
   const [isChatCollapsed, setIsChatCollapsed] = useState(true);
   const [selectedText, setSelectedText] = useState('');
   const [selectionRange, setSelectionRange] = useState({ start: 0, end: 0 });
-  const applyTextRef = useRef(null);
 
-  // NEW: Chat messages state - LaTeXEditor now manages chat messages
+  // Chat messages state
   const [chatMessages, setChatMessages] = useState([]);
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [ragMode, setRagMode] = useState(true);
 
-  // Resizable layout state - UPDATED for left-expanding chat
+  // Resizable layout state
   const [editorWidth, setEditorWidth] = useState(50);
   const [chatWidth, setChatWidth] = useState(25);
   const [isResizing, setIsResizing] = useState(false);
@@ -64,16 +66,67 @@ const LaTeXEditor = () => {
   const containerRef = useRef(null);
   const dragStartRef = useRef(null);
 
+  // NEW: Surgical editing state
+  const [surgicalEditingService, setSurgicalEditingService] = useState(null);
+  const [isProcessingSurgicalEdit, setIsProcessingSurgicalEdit] = useState(false);
+  const [surgicalEditHistory, setSurgicalEditHistory] = useState([]);
+
   // Groq server configuration
   const GROQ_SERVER_URL = process.env.REACT_APP_FLASK_SERVER_URL || 'https://llm-server-production.up.railway.app';
 
+  const [collaborators, setCollaborators] = useState([]);
+
+  
+  // NEW: Initialize surgical editing service
+  useEffect(() => {
+    const llmClient = async (prompt) => {
+      const response = await fetch(`${GROQ_SERVER_URL}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: prompt,
+          model_type: 'code',
+          project_id: projectId,
+          use_rag: ragMode && documents.filter(d => d.processingStatus === 'completed').length > 0,
+          max_tokens: 2000,
+          temperature: 0.2
+        })
+      });
+      
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error);
+      return data.response;
+    };
+
+    const service = new SurgicalEditingService(llmClient, {
+      debugMode: process.env.NODE_ENV === 'development',
+      validationEnabled: true,
+      maxRetries: 2
+    });
+
+    setSurgicalEditingService(service);
+  }, [projectId, ragMode, documents]);
+
   // ENHANCED: Function to extract LaTeX code or convert plain text to LaTeX
   const extractOrConvertLatexCode = (text) => {
+    if (!text || typeof text !== 'string') {
+      console.log('❌ Invalid text input for extraction');
+      return null;
+    }
+    
     // First, try to extract existing LaTeX code blocks
     const codeMatch = text.match(/```(?:latex|tex)?\s*([\s\S]*?)```/);
     if (codeMatch) {
       console.log('📄 Found LaTeX code block');
       return codeMatch[1].trim();
+    }
+    
+    // Check for LaTeX commands in the text
+    const hasLatexCommands = /\\[a-zA-Z]+|\\begin\{|\\end\{|\\section|\\subsection/.test(text);
+    
+    if (hasLatexCommands) {
+      console.log('📄 Found LaTeX commands in text');
+      return text.trim();
     }
     
     // Check if the response looks like it should be LaTeX content
@@ -84,21 +137,18 @@ const LaTeXEditor = () => {
       text.includes('introduction') ||
       text.includes('methodology') ||
       text.includes('conclusion') ||
-      selectedText.length > 0; // If user has selected text, they probably want LaTeX
+      selectedText.length > 0;
     
     if (shouldBeLatex) {
       console.log('📝 Converting plain text to LaTeX format');
       
-      // Convert plain text to LaTeX sections/paragraphs
-      let latexContent = text;
+      let latexContent = text.trim();
       
-      // If it's a substantial response and looks like content, format it as LaTeX
+      // Convert plain text to LaTeX format
       if (text.length > 100 && !text.startsWith('\\')) {
-        // Split by paragraphs and format
         const paragraphs = text.split('\n\n').filter(p => p.trim());
         
         if (paragraphs.length > 1) {
-          // Multiple paragraphs - treat first as section title if it's short
           if (paragraphs[0].length < 100 && !paragraphs[0].includes('.')) {
             const title = paragraphs[0].trim();
             const content = paragraphs.slice(1).join('\n\n');
@@ -112,13 +162,19 @@ const LaTeXEditor = () => {
       return latexContent;
     }
     
-    console.log('❌ No LaTeX code detected and content doesn\'t appear to be LaTeX-suitable');
+    // If all else fails, return the text as-is if it's substantial
+    if (text.trim().length > 10) {
+      console.log('📝 Returning text as-is');
+      return text.trim();
+    }
+    
+    console.log('❌ No LaTeX code detected and content not suitable');
     return null;
   };
 
-  // FIXED: Calculate layout widths - Preview stays exactly the same size
+  // Calculate layout widths
   const getLayoutWidths = useCallback(() => {
-    const basePreviewWidth = 100 - editorWidth; // Preview size when chat is collapsed
+    const basePreviewWidth = 100 - editorWidth;
     
     if (isChatCollapsed) {
       return {
@@ -128,16 +184,16 @@ const LaTeXEditor = () => {
       };
     } else {
       return {
-        editor: Math.max(20, editorWidth - chatWidth), // Editor gets smaller by chat width
+        editor: Math.max(20, editorWidth - chatWidth),
         chat: chatWidth,
-        preview: basePreviewWidth // Preview stays exactly the same
+        preview: basePreviewWidth
       };
     }
   }, [editorWidth, chatWidth, isChatCollapsed]);
 
   const { editor: currentEditorWidth, chat: currentChatWidth, preview: currentPreviewWidth } = getLayoutWidths();
 
-  // NEW: Initialize chat with welcome message
+  // Initialize chat with welcome message
   useEffect(() => {
     const completedDocs = documents.filter(doc => doc.processingStatus === 'completed').length;
     const processingDocs = documents.filter(doc => doc.processingStatus === 'processing').length;
@@ -151,26 +207,33 @@ const LaTeXEditor = () => {
     setChatMessages([{
       id: Date.now(),
       role: 'assistant',
-      content: `👋 Hi! I'm your LaTeX assistant powered by Groq AI. I can help you:
+      content: `👋 Hi! I'm your **Surgical LaTeX Assistant** powered by Groq AI. I can help you:
 
-• Write and fix LaTeX code
-• Explain LaTeX commands
-• Improve document structure
-• Generate equations and tables${ragStatus}
+• **Surgically edit** specific sections without affecting other content
+• Write and fix LaTeX code with precision
+• Explain LaTeX commands and improve document structure
+• Generate equations, tables, and figures${ragStatus}
 
-Select text in the editor and I'll help improve it, or just ask me anything!`,
+**New Surgical Editing Features:**
+• Select text → I'll improve only that part
+• Say "expand the intro" → I'll enhance just the introduction
+• Say "delete section 3" → I'll remove exactly that section
+• Full validation and rollback protection
+
+Select text in the editor and I'll surgically improve it, or just ask me anything!`,
       timestamp: new Date().toISOString(),
       autoApplied: false
     }]);
   }, [documents]);
 
-  // NEW: Main function to send message to Flask and handle response
+  // FIXED: Main function with natural language responses
   const sendChatMessage = async (message, isLatexAssist = false, assistAction = '') => {
-    if (!message.trim() || isChatLoading) return;
+    if (!message.trim() || isChatLoading || !surgicalEditingService) return;
 
-    console.log('🚀 LaTeXEditor sending message to Flask:', message.substring(0, 50));
+    console.log('🚀 LaTeXEditor sending message with surgical editing:', message.substring(0, 50));
 
     setIsChatLoading(true);
+    setIsProcessingSurgicalEdit(true);
 
     // Add user message to chat
     const userMessage = {
@@ -178,114 +241,121 @@ Select text in the editor and I'll help improve it, or just ask me anything!`,
       role: 'user',
       content: message,
       timestamp: new Date().toISOString(),
-      selectedText: selectedText || null
+      selectedText: selectedText || null,
+      selectionRange: selectionRange || null
     };
     setChatMessages(prev => [...prev, userMessage]);
 
     try {
-      // Create enhanced message with context and LaTeX formatting instructions
-      let enhancedMessage = message;
-      
-      // Add selected text context if available
-      if (selectedText && selectedText.trim().length > 0) {
-        enhancedMessage = `Context: I have selected this LaTeX text: "${selectedText}"\n\nQuestion: ${message}\n\nIMPORTANT: Please provide your response in proper LaTeX format that can be directly inserted into a LaTeX document.`;
-      } else {
-        // For general requests, encourage LaTeX format
-        enhancedMessage = `${message}\n\nIMPORTANT: Please provide your response in proper LaTeX format (sections, subsections, paragraphs, etc.) that can be directly inserted into a LaTeX document.`;
-      }
+      // NEW: Use surgical editing service for precise modifications
+      const surgicalResult = await surgicalEditingService.performSurgicalEdit(
+        latexCode,
+        message,
+        selectedText,
+        selectionRange
+      );
 
-      console.log('📤 Sending request to Flask server...');
+      console.log('🔧 Surgical editing result:', surgicalResult);
 
-      // Call Flask server
-      const response = await fetch(`${GROQ_SERVER_URL}/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: enhancedMessage,
-          model_type: isLatexAssist ? 'code' : 'text',
-          project_id: projectId,
-          use_rag: ragMode && documents.filter(d => d.processingStatus === 'completed').length > 0,
-          max_tokens: 1000,
-          temperature: 0.3
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Flask server error: ${response.status} - ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      console.log('✅ Flask response received:', data);
-
-      if (data.success && data.response) {
-        // Create assistant message
-        const assistantMessage = {
-          id: Date.now() + 1,
-          role: 'assistant',
-          content: data.response,
-          timestamp: new Date().toISOString(),
-          isLatexAssist,
-          assistAction,
-          autoApplied: false,
-          ragContext: data.context_used > 0 ? { chunks: [] } : null,
-          metadata: { action: assistAction }
-        };
-
-        // Add assistant message to chat
-        setChatMessages(prev => [...prev, assistantMessage]);
-
-        // ENHANCED: Try to extract or convert content for injection
-        const extractedCode = extractOrConvertLatexCode(data.response);
-        
-        if (extractedCode) {
-          console.log('🚀 LaTeXEditor: Auto-injecting content');
-          console.log('   - Content type:', extractedCode.includes('```') ? 'LaTeX code block' : 'Converted content');
-          console.log('   - Content length:', extractedCode.length);
-          console.log('   - Content preview:', extractedCode.substring(0, 100));
-          
-          // Direct injection
-          injectTextIntoEditor(extractedCode, selectedText ? selectionRange : null);
-          
-          // Update message to show it was applied
-          setChatMessages(prev => prev.map(msg => 
-            msg.id === assistantMessage.id 
-              ? { ...msg, autoApplied: true, appliedCode: extractedCode }
-              : msg
-          ));
-          
-          console.log('✅ LaTeXEditor: Auto-injection completed');
-        } else {
-          console.log('ℹ️ Content not suitable for auto-injection - will remain in chat only');
+      // Create assistant message
+      const assistantMessage = {
+        id: Date.now() + 1,
+        role: 'assistant',
+        content: '',
+        timestamp: new Date().toISOString(),
+        isLatexAssist,
+        assistAction,
+        autoApplied: false,
+        surgicalEdit: surgicalResult,
+        metadata: { 
+          action: assistAction,
+          surgical: true,
+          targetSection: surgicalResult.metadata?.targetSection,
+          editType: surgicalResult.metadata?.editType
         }
+      };
 
-        // Clear selection after processing
-        setSelectedText('');
-        setSelectionRange({ start: 0, end: 0 });
+      if (surgicalResult.success) {
+        // FIXED: Show natural, conversational response
+        let naturalResponse = surgicalResult.metadata.aiResponse || "I've made the changes you requested!";
+        
+        // Clean up any technical language that might slip through
+        naturalResponse = naturalResponse
+          .replace(/CONFIRMED_DELETE/g, "")
+          .replace(/\*\*[^*]+\*\*/g, "") // Remove **bold** formatting
+          .replace(/^✅.*?successfully\*\*/i, "")
+          .trim();
+        
+        // If the response is too technical, make it more natural
+        if (naturalResponse.includes('**') || naturalResponse.includes('Applied') || naturalResponse.length < 10) {
+          if (surgicalResult.metadata?.editType === 'delete') {
+            naturalResponse = `I've deleted the ${surgicalResult.metadata?.targetSection || 'selected'} section.`;
+          } else if (surgicalResult.metadata?.editType === 'add') {
+            naturalResponse = `I've added content to the ${surgicalResult.metadata?.targetSection || 'document'}.`;
+          } else if (surgicalResult.metadata?.editType === 'replace') {
+            naturalResponse = `I've updated the ${surgicalResult.metadata?.targetSection || 'selected'} section.`;
+          } else {
+            naturalResponse = "I've made the changes you requested!";
+          }
+        }
+        
+        assistantMessage.content = naturalResponse;
+        assistantMessage.autoApplied = true;
+
+        // Apply the surgical changes to the document
+        console.log('🔧 Applying surgical changes to document');
+        setLatexCode(surgicalResult.newDocument);
+
+        // Add to surgical edit history
+        setSurgicalEditHistory(prev => [...prev, {
+          id: surgicalResult.sessionId,
+          timestamp: assistantMessage.timestamp,
+          message: message,
+          changes: surgicalResult.changes,
+          validation: surgicalResult.metadata.validation
+        }]);
 
       } else {
-        throw new Error(data.error || 'No response from AI');
+        // FIXED: Natural error message
+        console.log('❌ Surgical edit failed, showing natural error message');
+        
+        assistantMessage.content = `I'm having trouble with that request. ${surgicalResult.error}
+
+Could you try rephrasing, or select specific text for me to work with?`;
+        assistantMessage.isError = true;
+        assistantMessage.autoApplied = false;
       }
+
+      // Add assistant message to chat
+      setChatMessages(prev => [...prev, assistantMessage]);
+
+      // Clear selection after processing
+      setSelectedText('');
+      setSelectionRange({ start: 0, end: 0 });
 
     } catch (err) {
-      console.error('❌ Flask communication error:', err);
+      console.error('❌ Surgical editing error:', err);
       
-      // Add error message to chat
+      // FIXED: Natural error message
       const errorMessage = {
         id: Date.now() + 1,
         role: 'assistant',
-        content: `❌ Sorry, I couldn't process your request. Error: ${err.message}\n\nPlease make sure the Flask server is running on ${GROQ_SERVER_URL}`,
+        content: `Sorry, I ran into an issue: ${err.message}
+
+Let me try again, or you can rephrase your request.`,
         timestamp: new Date().toISOString(),
-        isError: true
+        isError: true,
+        surgical: true,
+        autoApplied: false
       };
       setChatMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsChatLoading(false);
+      setIsProcessingSurgicalEdit(false);
     }
   };
 
-  // NEW: Quick action handlers
+  // Quick action handlers
   const handleQuickAction = (action) => {
     const actions = {
       equation: 'Generate a mathematical equation in LaTeX',
@@ -297,7 +367,7 @@ Select text in the editor and I'll help improve it, or just ask me anything!`,
     sendChatMessage(actions[action], true, action);
   };
 
-  // NEW: Selected text action handlers
+  // Selected text action handlers
   const handleSelectedTextAction = (action) => {
     if (!selectedText) return;
 
@@ -311,7 +381,7 @@ Select text in the editor and I'll help improve it, or just ask me anything!`,
     sendChatMessage(actions[action], true, action);
   };
 
-  // UPDATED: Handle mouse down on resize handles - Chat pushes Editor left
+  // Handle mouse down on resize handles
   const handleMouseDown = useCallback((e, type) => {
     e.preventDefault();
     e.stopPropagation();
@@ -337,20 +407,21 @@ Select text in the editor and I'll help improve it, or just ask me anything!`,
       const deltaPercent = (deltaX / containerWidth) * 100;
 
       if (type === 'editor-chat') {
-        // Moving right: editor gets smaller, chat gets bigger
+        // Dragging between editor and chat - both should adjust
         const newEditorWidth = Math.max(20, Math.min(70, startEditorWidth + deltaPercent));
         const widthDiff = newEditorWidth - startEditorWidth;
-        // Chat takes the space from editor reduction
         const newChatWidth = Math.max(15, Math.min(50, startChatWidth - widthDiff));
         
         setEditorWidth(newEditorWidth);
         setChatWidth(newChatWidth);
       } else if (type === 'chat-preview') {
-        // Moving right: chat gets bigger, preview gets smaller (but editor size stays same)
+        // FIXED: Dragging between chat and preview - only chat width should change
+        // Editor width stays the same, only chat width changes
         const newChatWidth = Math.max(15, Math.min(50, startChatWidth + deltaPercent));
         setChatWidth(newChatWidth);
+        // Don't change editor width - it should stay fixed
       } else if (type === 'editor-preview') {
-        // When chat is collapsed, normal editor-preview resize
+        // Dragging between editor and preview (when chat is collapsed)
         const newEditorWidth = Math.max(20, Math.min(80, startEditorWidth + deltaPercent));
         setEditorWidth(newEditorWidth);
       }
@@ -392,7 +463,7 @@ Select text in the editor and I'll help improve it, or just ask me anything!`,
     }
   };
 
-  // Load project data from API - FIXED: Properly placed inside component
+  // Load project data from API
   const loadProject = async () => {
     try {
       setLoading(true);
@@ -402,22 +473,16 @@ Select text in the editor and I'll help improve it, or just ask me anything!`,
       const response = await api.get(`/projects/${projectId}`);
       
       console.log('🔍 Full API response:', response);
-      console.log('🔍 Response data:', response.data);
-      console.log('🔍 Response structure:', Object.keys(response.data));
       
       let projectData = null;
       
-      // Check different possible response formats
       if (response.data.success && response.data.project) {
-        // Format: { success: true, project: {...} }
         projectData = response.data.project;
         console.log('✅ Using success/project format');
       } else if (response.data.data) {
-        // Format: { data: {...} }
         projectData = response.data.data;
         console.log('✅ Using data format');
       } else if (response.data.id) {
-        // Format: direct project object
         projectData = response.data;
         console.log('✅ Using direct object format');
       } else {
@@ -428,8 +493,7 @@ Select text in the editor and I'll help improve it, or just ask me anything!`,
       
       setProject(projectData);
       
-    // Use content from database, fallback to simple template
-    const content = projectData.latex_content || projectData.content || `\\documentclass{article}
+      const content = projectData.latex_content || projectData.content || `\\documentclass{article}
 \\begin{document}
 Hello Hello Hello :)
 \\end{document}`;
@@ -438,7 +502,6 @@ Hello Hello Hello :)
       console.log('✅ Project loaded successfully:', projectData.title);
     } catch (error) {
       console.error('❌ Error loading project:', error);
-      console.error('❌ Error response:', error.response?.data);
       setError('Failed to load project. Please try again.');
     } finally {
       setLoading(false);
@@ -668,49 +731,58 @@ Hello Hello Hello :)
     }
   };
 
-  // SIMPLIFIED: Direct text injection bypassing the ref system entirely
+  // ENHANCED: Direct text injection bypassing the ref system entirely
   const injectTextIntoEditor = (newText, range = null) => {
     console.log('🔧 LaTeXEditor: Direct text injection');
     console.log('   - newText length:', newText?.length || 0);
-    console.log('   - newText preview:', newText?.substring(0, 100));
     console.log('   - range:', range);
-    console.log('   - selectedText:', selectedText?.substring(0, 50));
-    console.log('   - current latexCode length:', latexCode?.length || 0);
+    
+    if (!newText) {
+      console.log('❌ No text to inject');
+      return;
+    }
     
     if (range && range.start !== range.end && selectedText) {
       // Replace selected text
-      console.log('🔄 Replacing selected text from', range.start, 'to', range.end);
       const before = latexCode.substring(0, range.start);
       const after = latexCode.substring(range.end);
       const updatedCode = before + newText + after;
       setLatexCode(updatedCode);
-      console.log('✅ Selected text replaced, new length:', updatedCode.length);
+      console.log('✅ Replaced selected text');
     } else if (range && range.start >= 0) {
       // Insert at specific position
-      console.log('🔄 Inserting at position:', range.start);
       const before = latexCode.substring(0, range.start);
       const after = latexCode.substring(range.start);
       const updatedCode = before + '\n' + newText + '\n' + after;
       setLatexCode(updatedCode);
-      console.log('✅ Text inserted at position, new length:', updatedCode.length);
+      console.log('✅ Inserted at specific position');
     } else {
-      // Append to end
-      console.log('🔄 Appending to end of document');
-      setLatexCode(prev => {
-        const currentCode = prev || '';
-        const newCode = currentCode.trim() + '\n\n' + newText;
-        console.log('✅ Text appended, new length:', newCode.length);
-        return newCode;
-      });
+      // Smart insertion based on document structure
+      const currentCode = latexCode || '';
+      
+      // Check if document has \end{document}
+      if (currentCode.includes('\\end{document}')) {
+        // Insert before \end{document}
+        const endDocIndex = currentCode.lastIndexOf('\\end{document}');
+        const before = currentCode.substring(0, endDocIndex);
+        const after = currentCode.substring(endDocIndex);
+        const updatedCode = before.trimEnd() + '\n\n' + newText + '\n\n' + after;
+        setLatexCode(updatedCode);
+        console.log('✅ Inserted before \\end{document}');
+      } else {
+        // Append to end
+        const updatedCode = currentCode.trim() + '\n\n' + newText;
+        setLatexCode(updatedCode);
+        console.log('✅ Appended to end');
+      }
     }
     
     // Clear selection after injection
     setSelectedText('');
     setSelectionRange({ start: 0, end: 0 });
-    console.log('🧹 Cleared selection after injection');
   };
 
-  // ENHANCED: Manual apply with better code extraction
+  // Manual apply with better code extraction
   const handleManualApplyText = (messageId, code) => {
     if (code) {
       console.log('🔧 LaTeXEditor: Manual apply triggered');
@@ -722,12 +794,10 @@ Hello Hello Hello :)
           ? { ...msg, manuallyApplied: true }
           : msg
       ));
-      
-      console.log('✅ LaTeXEditor: Manual apply completed');
     }
   };
 
-  // NEW: Function to manually apply any message content (not just LaTeX code)
+  // Function to manually apply any message content
   const handleApplyAnyContent = (messageId, content) => {
     console.log('🔧 LaTeXEditor: Applying any content');
     const processedContent = extractOrConvertLatexCode(content) || content;
@@ -739,8 +809,6 @@ Hello Hello Hello :)
         ? { ...msg, manuallyApplied: true }
         : msg
     ));
-    
-    console.log('✅ LaTeXEditor: Any content apply completed');
   };
 
   // Get editor context for chat
@@ -756,51 +824,47 @@ Hello Hello Hello :)
   };
 
   // Document management handlers
-const handleDocumentsUploaded = async (newDocuments) => {
-  console.log(`${newDocuments.length} documents uploaded, refreshing list...`);
-  
-  // Instead of just adding, re-fetch all documents to get updated info
-  await loadDocuments();
-  
-  // Set up polling to check for processing updates
-  const pollForUpdates = () => {
-    let pollCount = 0;
-    const maxPolls = 40; // 40 * 3 seconds = 2 minutes max
+  const handleDocumentsUploaded = async (newDocuments) => {
+    console.log(`${newDocuments.length} documents uploaded, refreshing list...`);
+    await loadDocuments();
     
-    const checkInterval = setInterval(async () => {
-      pollCount++;
-      console.log(`📊 Polling for updates (${pollCount}/${maxPolls})`);
+    const pollForUpdates = () => {
+      let pollCount = 0;
+      const maxPolls = 40;
       
-      try {
-        await loadDocuments();
+      const checkInterval = setInterval(async () => {
+        pollCount++;
+        console.log(`📊 Polling for updates (${pollCount}/${maxPolls})`);
         
-        // Stop polling when all documents are processed OR max polls reached
-        const currentDocs = await api.get(`/documents/${projectId}`);
-        const processingDocs = currentDocs.data.documents.filter(
-          doc => doc.processingStatus === 'processing' || doc.processingStatus === 'pending'
-        );
-        
-        if (processingDocs.length === 0) {
+        try {
+          await loadDocuments();
+          
+          const currentDocs = await api.get(`/documents/${projectId}`);
+          const processingDocs = currentDocs.data.documents.filter(
+            doc => doc.processingStatus === 'processing' || doc.processingStatus === 'pending'
+          );
+          
+          if (processingDocs.length === 0) {
+            clearInterval(checkInterval);
+            console.log('✅ All documents processed - stopping polls');
+            return;
+          }
+          
+          if (pollCount >= maxPolls) {
+            clearInterval(checkInterval);
+            console.log('⏰ Max polling time reached - stopping polls');
+            return;
+          }
+          
+        } catch (error) {
+          console.error('❌ Polling error:', error);
           clearInterval(checkInterval);
-          console.log('✅ All documents processed - stopping polls');
-          return;
         }
-        
-        if (pollCount >= maxPolls) {
-          clearInterval(checkInterval);
-          console.log('⏰ Max polling time reached - stopping polls');
-          return;
-        }
-        
-      } catch (error) {
-        console.error('❌ Polling error:', error);
-        clearInterval(checkInterval);
-      }
-    }, 3000);
+      }, 3000);
+    };
+    
+    pollForUpdates();
   };
-  
-  pollForUpdates();
-};
 
   const handleDeleteDocument = async (documentId) => {
     if (window.confirm('Are you sure you want to delete this document? This will also remove its embeddings.')) {
@@ -848,6 +912,11 @@ const handleDocumentsUploaded = async (newDocuments) => {
       }
     }
   };
+
+const handleCollaboratorsChange = (newCollaborators) => {
+  setCollaborators(newCollaborators);
+  console.log(`👥 Collaborators updated: ${newCollaborators.length} total`);
+};
 
   // Loading state
   if (loading) {
@@ -920,10 +989,13 @@ const handleDocumentsUploaded = async (newDocuments) => {
     isResizing,
     isChatCollapsed,
     onToggleChat: handleToggleChat,
-    ragEnabled: documents.filter(doc => doc.processingStatus === 'completed').length > 0
+    ragEnabled: documents.filter(doc => doc.processingStatus === 'completed').length > 0,
+    // NEW: Surgical editing status
+    isProcessingSurgicalEdit,
+    surgicalEditHistory: surgicalEditHistory.slice(-5) // Last 5 edits
   };
   
-  // NEW: Updated ChatPanel props - now receives messages and handlers from parent
+  // Updated ChatPanel props with surgical editing support
   const chatProps = {
     projectId,
     isCollapsed: isChatCollapsed,
@@ -933,7 +1005,7 @@ const handleDocumentsUploaded = async (newDocuments) => {
     documents: documents,
     ragEnabled: documents.filter(doc => doc.processingStatus === 'completed').length > 0,
     width: currentChatWidth,
-    // NEW: Pass chat state and handlers
+    // Chat state and handlers
     messages: chatMessages,
     isLoading: isChatLoading,
     ragMode,
@@ -942,14 +1014,19 @@ const handleDocumentsUploaded = async (newDocuments) => {
     onQuickAction: handleQuickAction,
     onSelectedTextAction: handleSelectedTextAction,
     onManualApplyText: handleManualApplyText,
-    onApplyAnyContent: handleApplyAnyContent, // NEW: Apply any content
-    extractLatexCode: extractOrConvertLatexCode
+    onApplyAnyContent: handleApplyAnyContent,
+    extractLatexCode: extractOrConvertLatexCode,
+    // NEW: Surgical editing specific props
+    isProcessingSurgicalEdit,
+    surgicalEditHistory,
+    surgicalEditingService
   };
 
   const previewProps = {
     pdfUrl,
     isCompiling,
-    editorWidth: currentPreviewWidth
+    editorWidth: currentPreviewWidth,
+    compileErrors // NEW: Pass compile errors to PDF preview
   };
 
   const documentUploadProps = {
@@ -960,63 +1037,93 @@ const handleDocumentsUploaded = async (newDocuments) => {
     onReprocessDocument: handleReprocessDocument
   };
 
-  return (
-    <div className="h-screen flex flex-col bg-gray-50">
-      <Toolbar {...toolbarProps} />
-      
-      <div className="flex-1 flex overflow-hidden" ref={containerRef}>
-        {/* Left Sidebar */}
-        <div className={`${sidebarOpen ? 'w-64' : 'w-0'} transition-all duration-300 ease-in-out overflow-hidden bg-white border-r border-gray-200`}>
-          <div className="h-full flex flex-col">
-            <div className="flex-1 overflow-y-auto">
-              <FileTree {...fileTreeProps} />
-            </div>
-            <div className="border-t border-gray-200 p-4 space-y-4">
-              <DocumentUpload {...documentUploadProps} />
-            </div>
-          </div>
-        </div>
+return (
+  <Collaborator
+    projectId={projectId}
+    project={project}
+    onCollaboratorsChange={handleCollaboratorsChange}
+  >
+    {(collaborationProps) => (
+      <div className="h-screen flex flex-col bg-gray-50">
+        <Toolbar 
+          project={project}
+          isEditingTitle={isEditingTitle}
+          tempTitle={tempTitle}
+          setTempTitle={setTempTitle}
+          isCompiling={isCompiling}
+          pdfUrl={pdfUrl}
+          sidebarOpen={sidebarOpen}
+          setSidebarOpen={setSidebarOpen}
+          activeFile={activeFile}
+          latexCode={latexCode}
+          onTitleClick={handleTitleClick}
+          onTitleSave={handleTitleSave}
+          onTitleCancel={handleTitleCancel}
+          onCompile={() => handleCompile(false)}
+          onNavigateBack={() => navigate('/dashboard')}
+          onCloneProject={handleCloneProject}
+          onDeleteProject={handleDeleteProject}
+          onShareProject={collaborationProps.shareProject}
+          onCreateShareLink={collaborationProps.createShareLink}
+          projectCollaborators={collaborationProps.collaborators}
+        />
         
-        {/* CORRECTED: Layout order - Editor | Chat | Preview */}
-        <div className="flex-1 flex relative">
-          {/* Editor Panel */}
-          <EditorPanel {...editorProps} />
-          
-          {/* Draggable Resize Handle - Editor to Chat */}
-          <div
-            className={`w-1 bg-gray-200 hover:bg-blue-300 cursor-col-resize flex items-center justify-center group transition-colors select-none ${
-              isResizing && (resizeType === 'editor-chat' || resizeType === 'editor-preview') ? 'bg-blue-400' : ''
-            }`}
-            onMouseDown={(e) => handleMouseDown(e, isChatCollapsed ? 'editor-preview' : 'editor-chat')}
-            title={isChatCollapsed ? "Drag to resize editor and preview panels" : "Drag to resize editor and chat panels"}
-            style={{ zIndex: 10 }}
-          >
-            <div className="w-0.5 h-8 bg-gray-400 group-hover:bg-blue-500 rounded-full opacity-60 group-hover:opacity-100 transition-all pointer-events-none"></div>
+        <div className="flex-1 flex overflow-hidden h-full" ref={containerRef}>
+          {/* Left Sidebar */}
+          <div className={`${sidebarOpen ? 'w-64' : 'w-0'} transition-all duration-300 ease-in-out overflow-hidden bg-white border-r border-gray-200 flex flex-col`}>
+            <div className="h-full flex flex-col min-h-0">
+              <div className="flex-1 overflow-y-auto">
+                <FileTree {...fileTreeProps} />
+              </div>
+              <div className="border-t border-gray-200 p-4 space-y-4 flex-shrink-0">
+                <DocumentUpload {...documentUploadProps} />
+              </div>
+            </div>
           </div>
           
-          {/* Chat Panel */}
-          <ChatPanel {...chatProps} />
-          
-          {/* Draggable Resize Handle - Chat to Preview */}
-          {!isChatCollapsed && (
+          {/* Main Content Area */}
+          <div className="flex-1 flex relative min-w-0">
+            {/* Editor Panel */}
+            <EditorPanel {...editorProps} />
+            
+            {/* Draggable Resize Handle - Editor to Chat */}
             <div
               className={`w-1 bg-gray-200 hover:bg-blue-300 cursor-col-resize flex items-center justify-center group transition-colors select-none ${
-                isResizing && resizeType === 'chat-preview' ? 'bg-blue-400' : ''
+                isResizing && (resizeType === 'editor-chat' || resizeType === 'editor-preview') ? 'bg-blue-400' : ''
               }`}
-              onMouseDown={(e) => handleMouseDown(e, 'chat-preview')}
-              title="Drag to resize chat and preview panels"
+              onMouseDown={(e) => handleMouseDown(e, isChatCollapsed ? 'editor-preview' : 'editor-chat')}
+              title={isChatCollapsed ? "Drag to resize editor and preview panels" : "Drag to resize editor and chat panels"}
               style={{ zIndex: 10 }}
             >
               <div className="w-0.5 h-8 bg-gray-400 group-hover:bg-blue-500 rounded-full opacity-60 group-hover:opacity-100 transition-all pointer-events-none"></div>
             </div>
-          )}
-          
-          {/* PDF Preview Panel */}
-          <PDFPreview {...previewProps} />
+            
+            {/* Chat Panel */}
+            <ChatPanel {...chatProps} />
+            
+            {/* Draggable Resize Handle - Chat to Preview */}
+            {!isChatCollapsed && (
+              <div
+                className={`w-1 bg-gray-200 hover:bg-blue-300 cursor-col-resize flex items-center justify-center group transition-colors select-none ${
+                  isResizing && resizeType === 'chat-preview' ? 'bg-blue-400' : ''
+                }`}
+                onMouseDown={(e) => handleMouseDown(e, 'chat-preview')}
+                title="Drag to resize chat and preview panels"
+                style={{ zIndex: 10 }}
+              >
+                <div className="w-0.5 h-8 bg-gray-400 group-hover:bg-blue-500 rounded-full opacity-60 group-hover:opacity-100 transition-all pointer-events-none"></div>
+              </div>
+            )}
+            
+            {/* PDF Preview Panel */}
+            <PDFPreview {...previewProps} />
+          </div>
         </div>
       </div>
-    </div>
-  );
-};
+    )}
+  </Collaborator>
+);
+
+}; // Don't forget the closing bracket for the LaTeXEditor component
 
 export default LaTeXEditor;

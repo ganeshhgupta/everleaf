@@ -36,3 +36,55 @@
     transform: rotate(360deg);
   }
 }
+
+/* Add this CSS to ensure consistent header heights across all panels */
+
+/* Fix for panel headers getting chopped off */
+.panel-header {
+  min-height: 44px !important;
+  max-height: 44px !important;
+  flex-shrink: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  border-bottom: 1px solid #e5e7eb !important;
+  background-color: white !important;
+}
+
+/* Ensure all panel containers use proper flex layout */
+.panel-container {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+  overflow: hidden !important;
+}
+
+/* Fix for chat panel specifically */
+.chat-panel {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+  min-height: 0 !important;
+}
+
+.chat-messages {
+  flex: 1 1 auto !important;
+  overflow-y: auto !important;
+  min-height: 0 !important;
+}
+
+.chat-input-area {
+  flex-shrink: 0 !important;
+  border-top: 1px solid #e5e7eb !important;
+}
+
+/* Fix for editor panel header */
+.editor-header {
+  min-height: 44px !important;
+  flex-shrink: 0 !important;
+}
+
+/* Fix for file tree header */
+.file-tree-header {
+  min-height: 44px !important;
+  flex-shrink: 0 !important;
+}

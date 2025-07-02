@@ -6,8 +6,12 @@ const {
   validateProjectCreation,
   validateProjectUpdate,
   validateCollaborationInvite,
+  validateShareProject,      // NEW
+  validateCreateShareLink,   // NEW
   validateId
 } = require('../middleware/validation');
+
+console.log('🚀 Projects routes file loaded');
 
 // Public routes (no authentication required)
 router.get('/public', optionalAuth, projectController.getPublicProjects);
@@ -29,6 +33,12 @@ router.delete('/:id', validateId('id'), projectController.deleteProject);
 // Project cloning
 router.post('/:id/clone', validateId('id'), projectController.cloneProject);
 
+// ===== NEW SHARING ROUTES =====
+router.post('/:id/share', validateId('id'), validateShareProject, projectController.shareProject);
+router.post('/:id/share-link', validateId('id'), validateCreateShareLink, projectController.createShareLink);
+router.get('/:id/share-link', validateId('id'), projectController.getShareLink);
+router.delete('/:id/share-link', validateId('id'), projectController.disableShareLink);
+
 // Collaboration management
 router.get('/:id/collaborators', validateId('id'), projectController.getCollaborators);
 router.post('/:id/collaborators', validateId('id'), validateCollaborationInvite, projectController.addCollaborator);
@@ -41,5 +51,13 @@ router.delete('/:id/collaborators/:collaboratorId',
 
 // Project activity/history
 router.get('/:id/activity', validateId('id'), projectController.getProjectActivity);
+
+console.log('📋 Registered project routes:');
+router.stack.forEach(layer => {
+  if (layer.route) {
+    const methods = Object.keys(layer.route.methods);
+    console.log(`  ${methods.join(', ').toUpperCase()} ${layer.route.path}`);
+  }
+});
 
 module.exports = router;
