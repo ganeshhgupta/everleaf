@@ -30,6 +30,43 @@ const Dashboard = () => {
   const [error, setError] = useState(null);
   const [creating, setCreating] = useState(false);
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, project: null });
+  const [specialGreeting, setSpecialGreeting] = useState(false);
+
+  // Check for special user greeting
+  useEffect(() => {
+    checkSpecialUser();
+  }, [user]);
+
+  const checkSpecialUser = async () => {
+    try {
+      if (!user?.email) {
+        return;
+      }
+
+      // Check frontend env var
+      const frontendSpecialEmail = process.env.REACT_APP_CHH_CHH;
+      
+      if (frontendSpecialEmail && user.email.trim().toLowerCase() === frontendSpecialEmail.trim().toLowerCase()) {
+        setSpecialGreeting(true);
+        return;
+      }
+
+      // If no match, try API call as backup
+      try {
+        const response = await api.get('/users/check-special', {
+          params: { email: user.email }
+        });
+        
+        if (response.data.isSpecial) {
+          setSpecialGreeting(true);
+        }
+      } catch (apiError) {
+        // API call failed, continue without backend check
+      }
+    } catch (error) {
+      console.error('Special user check failed:', error);
+    }
+  };
 
   // Load projects on component mount
   useEffect(() => {
@@ -85,7 +122,7 @@ const Dashboard = () => {
     logout();
   };
 
-  // Handle "New Project" and "Create Project" buttons - simple content
+  // Handle "New Project" and "Create Project" buttons - simple content with special greeting
   const handleCreateProject = async () => {
     try {
       setCreating(true);
@@ -93,10 +130,11 @@ const Dashboard = () => {
       const baseTitle = `New Project ${new Date().toLocaleDateString()}`;
       const uniqueTitle = generateUniqueTitle(baseTitle, [...projects, ...collaboratedProjects]);
       
-      // Set simple content directly in the project
+      // Set simple content with conditional greeting
+      const greeting = specialGreeting ? 'Chh Chh..' : 'Hello Hello Hello :)';
       const simpleContent = `\\documentclass{article}
 \\begin{document}
-Hello Hello Hello :)
+${greeting}
 \\end{document}`;
       
       const projectData = {
@@ -345,17 +383,21 @@ Hello Hello Hello :)
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2">
                 <img 
-                  src="/everleaf_logo.png" 
+                  src="/logo512.png" 
                   alt="Everleaf" 
-                  className="w-8 h-8 rounded-lg"
+                  className="w-8 h-8 rounded-full"
                   onError={(e) => {
                     // Fallback to gradient background with icon if image fails
                     e.target.style.display = 'none';
                     e.target.nextElementSibling.style.display = 'flex';
                   }}
                 />
-                <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-600 rounded-lg flex items-center justify-center" style={{ display: 'none' }}>
-                  <AcademicCapIcon className="w-5 h-5 text-white" />
+                <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-600 rounded-full flex items-center justify-center" style={{ display: 'none' }}>
+                  <img 
+                    src="/logo512.png" 
+                    alt="Everleaf" 
+                    className="w-5 h-5 rounded-full"
+                  />
                 </div>
                 <span className="text-xl font-bold text-gray-900">Everleaf</span>
               </div>
@@ -422,7 +464,7 @@ Hello Hello Hello :)
           </motion.div>
         )}
 
-        {/* Welcome Section */}
+        {/* Welcome Section with conditional greeting */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -430,7 +472,7 @@ Hello Hello Hello :)
           className="mb-8"
         >
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Welcome back, {user?.firstName || user?.first_name}!
+            {specialGreeting ? 'Chh Chh..' : 'Welcome back'}, {user?.firstName || user?.first_name}{specialGreeting ? ' :)' : '!'}
           </h1>
           <p className="text-gray-600">
             Ready to continue your research? Here are your recent projects.
