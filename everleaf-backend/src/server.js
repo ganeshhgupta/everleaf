@@ -35,7 +35,7 @@ const server = http.createServer(app);
 const PORT = process.env.PORT || 5000;
 
 // Flask LLM Server configuration
-const FLASK_SERVER_URL = process.env.FLASK_SERVER_URL || 'https://llm-server-production.up.railway.app';
+const FLASK_SERVER_URL = process.env.FLASK_SERVER_URL || 'https://llm-server.up.railway.app';
 
 // Initialize WebSocket manager
 let wsManager;

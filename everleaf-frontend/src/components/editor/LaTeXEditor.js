@@ -66,7 +66,7 @@ const LaTeXEditor = () => {
   const containerRef = useRef(null);
   const dragStartRef = useRef(null);
 
-  const GROQ_SERVER_URL = process.env.REACT_APP_FLASK_SERVER_URL || 'https://llm-server-production.up.railway.app';
+  const GROQ_SERVER_URL = process.env.REACT_APP_FLASK_SERVER_URL || 'https://llm-server.up.railway.app';
 
   // FIXED: Mobile detection with proper state management to prevent header disappearing
   const checkIsMobile = useCallback(() => {
